@@ -6,30 +6,25 @@ clc; clear; close all;
 img = imread('Noah_01_01_01.jpg');
 grayImg = rgb2gray(img);
 
-% % grayImg= imdilate(grayImg,strel("square",2)); % debug
-% figure;
-% imshow(grayImg)
+grayImg = medfilt2(grayImg); % median filter to reduce errors (3 by 3)
+
 
 % Otsu's method for binarization
 thresh = graythresh(grayImg);
 bwImg = imbinarize(grayImg, thresh);
+% 
+% bwImg = imclose(bwImg,strel('line',5,0));
+% 
+% bwImg = bwmorph(bwImg,'bridge',Inf);
 
-% Dilatation of smaller points
-bwImg = imdilate(bwImg,strel("square",2));
 
-% Recognition of horizontal and vertical lines
-hLines = imopen(~bwImg, strel('line', 30, 0));
-vLines = imopen(~bwImg, strel('line', 30, 90));
-smallerHLines = imopen(~bwImg, strel('line', 10, 0));
-%To do: complete the recognition
-gridMask = hLines | vLines | smallerHLines;
 
-%Plot visualization
+% % Dilatation of smaller points
+bwImg = imdilate(bwImg,strel("square",1));
 
-% Extract data by removing grid
-figure, imshow(gridMask);
-title('Immagine con la grid mask');
+bwImg = bwmorph(bwImg,'bridge',Inf);
+
 
 figure, imshow(bwImg);
-title('Immagine Binarizzata');
+title('Binary image');
 
