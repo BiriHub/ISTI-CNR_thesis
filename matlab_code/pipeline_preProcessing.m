@@ -1,22 +1,31 @@
 %% Image pre-processing script in matlab
 
-% clc; clear; close all;
+clc; clear; close all;
 
 % Load image
-img = imread('Noah_01_01_02.jpg');
+img = imread('Noah_01_01_01.jpg');
 grayImg = rgb2gray(img);
+grayImg = medfilt2(grayImg); % median filter to red7uce errors (3 by 3)
 
-grayImg = medfilt2(grayImg); % median filter to reduce errors (3 by 3)
 
-
-%% 2. Creazione della Mappa di Bordi con Canny
+%% 2. Edge-detection with Canny's algorithm
 % Applica l'operatore Canny per ottenere la mappa di bordi binaria
 edgeMap = edge(grayImg, 'Canny');
 
 % Visualizza la mappa di bordi
+
+% dilatation
+edgeMap = imdilate(edgeMap,strel('line',3,0))| imdilate(edgeMap,strel('line',3,90));
+edgeMap = imfill(edgeMap,4 ,'holes');
+
+% extract the perimeter of the grid
+edgeMap = bwmorph(edgeMap,'remove');
+
 figure;
 imshow(edgeMap);
 title('Mappa di Bordi (Canny)');
+%increase line size preparing to hough transformation
+edgeMap = imdilate(edgeMap,strel("square",3));
 
 %% 3. Applicazione della Trasformata di Hough per il Rilevamento delle Linee
 % Calcola la trasformata di Hough
