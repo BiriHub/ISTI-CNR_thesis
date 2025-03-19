@@ -32,11 +32,10 @@ edgeMap = imdilate(edgeMap,strel("square",3));
 [H, theta, rho] = hough(edgeMap);
 
 % Individua i picchi nella trasformata di Hough (numero e soglia possono essere regolati)
-peaks = houghpeaks(H, 32, 'threshold', ceil(0.3*max(H(:))));
+peaks = houghpeaks(H, 4);
 
 % Estrai le linee rilevate basandoti sui picchi trovati
-% Linee = assi orizzontali
-lines = houghlines(edgeMap, theta, rho, peaks, 'FillGap', 45, 'MinLength', 750); % "750 pixel " è circa la lunghezza dell'asse x
+lines = houghlines(edgeMap, theta, rho, peaks, 'FillGap', 40);
 
 
 %% 4. Visualizzazione dei Risultati
