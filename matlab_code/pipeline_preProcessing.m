@@ -9,7 +9,7 @@ grayImg = medfilt2(grayImg); % median filter to reduce errors (3 by 3)
 
 %% 2. Edge-detection with Canny's algorithm
 % Apply the Canny operator to obtain the binary edge map
-edgeMap = edge(grayImg, 'Canny');
+bin_img = edge(grayImg, 'Canny');
 
 % Debug
 % figure;
@@ -17,7 +17,7 @@ edgeMap = edge(grayImg, 'Canny');
 % title('Edge Map (Canny)');
 
 % Dilation
-edgeMap = imdilate(edgeMap, strel('line',3,0)) | imdilate(edgeMap, strel('line',3,90));
+edgeMap = imdilate(bin_img, strel('line',3,0)) | imdilate(bin_img, strel('line',3,90));
 
 % Debug
 % figure;
@@ -131,7 +131,49 @@ plot(point_intersec_x, point_intersec_y, 'ro', 'MarkerSize', 5, 'MarkerFaceColor
 
 hold off;
 
-grid_points= [point_intersec_x(:),point_intersec_y(:);];
+
+% Combina le coordinate in una matrice [x, y]
+points = [point_intersec_x(:) point_intersec_y(:)];
+
+% Ordina le righe in base alla coordinata y (crescente)
+points_sorted = sortrows(points, 2);  % i primi due punti sono quelli "in alto"
+
+% Separa i due gruppi: top (punti con y minori) e bottom (punti con y maggiori)
+top_points = points_sorted(1:2, :);
+bottom_points = points_sorted(3:4, :);
+
+% Tra i top_points, il punto con x minore è top-left, con x maggiore è top-right
+if top_points(1,1) < top_points(2,1)
+    top_left = top_points(1,:);
+    top_right = top_points(2,:);
+else
+    top_left = top_points(2,:);
+    top_right = top_points(1,:);
+end
+
+% Tra i bottom_points, il punto con x minore è bottom-left, con x maggiore è bottom-right
+if bottom_points(1,1) < bottom_points(2,1)
+    bottom_left = bottom_points(1,:);
+    bottom_right = bottom_points(2,:);
+else
+    bottom_left = bottom_points(2,:);
+    bottom_right = bottom_points(1,:);
+end
+
+% Visualizza i risultati
+figure;
+imshow(img);
+hold on;
+plot(top_left(1), top_left(2), 'bo', 'MarkerSize', 10, 'LineWidth', 2);
+plot(top_right(1), top_right(2), 'go', 'MarkerSize', 10, 'LineWidth', 2);
+plot(bottom_left(1), bottom_left(2), 'co', 'MarkerSize', 10, 'LineWidth', 2);
+plot(bottom_right(1), bottom_right(2), 'mo', 'MarkerSize', 10, 'LineWidth', 2);
+legend('Top Left', 'Top Right', 'Bottom Left', 'Bottom Right');
+hold off;
+
+grid_points= [top_left(1) top_left(2);top_right(1) top_right(2);
+              bottom_left(1) bottom_left(2); bottom_right(1) bottom_right(2)];
+
 
 % % Otsu's method for binarization
 % thresh = graythresh(grayImg);
