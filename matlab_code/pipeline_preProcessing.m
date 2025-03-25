@@ -162,19 +162,32 @@ area_width = abs(grid_points(1,1) - img_max_width);
 % Height of the upper OCR area
 area_height = grid_points(1,2) - 1;
 
-ocr_bin_img = imdilate(bin_img, strel("square", 2));
+% Apply morphological operations
+thinned_img = bwmorph(bin_img, 'thin', Inf);
 
 
-ocr_bin_img= imfill(ocr_bin_img, 'holes');
+thinned_img =bwmorph(thinned_img,"bridge");
+
+% Fill holes
+thinned_img = imfill(thinned_img, 'holes');
+
+    % thinned_img =imopen(thinned_img,strel("disk",5));
+
+
+% Invert image (dark text on light background)
+thinned_img = imcomplement(thinned_img);
+
 figure;
-imshow(ocr_bin_img);
+imshow(thinned_img);
+
+% Perform OCR
+ocr_results = ocr(thinned_img, [grid_points(1,1), 1, area_width, area_height], ...
+    'LayoutAnalysis', 'Block', 'CharacterSet', "0124568k");
 
 
-ocr_bin_img = imcomplement(ocr_bin_img);
-
-ocr_results = ocr(ocr_bin_img, [grid_points(1,1), 1, area_width, area_height], 'LayoutAnalysis', 'Block','CharacterSet',"0123456789k");
+    
+    
 ocr_results.Text
-
 % 
 % 
 % % Pre-elaborazione per migliorare l'OCR
