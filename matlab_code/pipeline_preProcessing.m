@@ -1,6 +1,6 @@
 %% Image pre-processing script in MATLAB
 
-% clc; clear; close all;
+clc; clear; close all;
 
 % Load image
 img = imread('Noah_01_02_01.jpg');
@@ -121,17 +121,6 @@ for i = 1:num_lines
     end
 end
 
-figure;
-imshow(img);
-hold on;
-title('Grid Intersection Points');
-
-% Draw the points on the image
-plot(point_intersec_x, point_intersec_y, 'ro', 'MarkerSize', 5, 'MarkerFaceColor', 'r');
-
-hold off;
-
-
 % Combina le coordinate in una matrice [x, y]
 points = [point_intersec_x(:) point_intersec_y(:)];
 
@@ -161,47 +150,74 @@ else
 end
 
 % Visualizza i risultati
+%% OCR
+
+% Frequencies axis
+
+[img_max_height,img_max_width]= size(grayImg);
+
+% Width of the upper OCR area
+area_width = abs(grid_points(1,1) - img_max_width);
+
+% Height of the upper OCR area
+area_height = grid_points(1,2) - 1;
+
+ocr_bin_img = imdilate(bin_img, strel("square", 2));
+
+
+ocr_bin_img= imfill(ocr_bin_img, 'holes');
 figure;
-imshow(img);
-hold on;
-plot(top_left(1), top_left(2), 'bo', 'MarkerSize', 10, 'LineWidth', 2);
-plot(top_right(1), top_right(2), 'go', 'MarkerSize', 10, 'LineWidth', 2);
-plot(bottom_left(1), bottom_left(2), 'co', 'MarkerSize', 10, 'LineWidth', 2);
-plot(bottom_right(1), bottom_right(2), 'mo', 'MarkerSize', 10, 'LineWidth', 2);
-legend('Top Left', 'Top Right', 'Bottom Left', 'Bottom Right');
-hold off;
-
-grid_points= [top_left(1) top_left(2);top_right(1) top_right(2);
-              bottom_left(1) bottom_left(2); bottom_right(1) bottom_right(2)];
+imshow(ocr_bin_img);
 
 
-% % Otsu's method for binarization
-% thresh = graythresh(grayImg);
-% bwImg = imbinarize(grayImg, thresh);
+ocr_bin_img = imcomplement(ocr_bin_img);
+
+ocr_results = ocr(ocr_bin_img, [grid_points(1,1), 1, area_width, area_height], 'LayoutAnalysis', 'Block','CharacterSet',"0123456789k");
+ocr_results.Text
+
 % 
-% % % Recognition of horizontal and vertical lines
+% 
+% % Pre-elaborazione per migliorare l'OCR
+% % Aumenta il contrasto
+% grayImg_enhanced = adapthisteq(grayImg);
+% 
+% % Applica sogliatura adattiva
+% bw = imbinarize(grayImg_enhanced, 'adaptive', 'Sensitivity', 0.6);
+% 
+% % Rimuovi piccoli oggetti
 % % hLines = imopen(~bwImg, strel('line', 30, 0));
-% % vLines = imopen(~bwImg, strel('line', 30, 90));
-% % smallerHLines = imopen(~bwImg, strel('line', 10, 0));
-% % smallerVLines = imopen(~bwImg, strel('line', 10, 90));
-% % %Plot visualization
-% % gridMask = hLines | vLines | smallerHLines | smallerVLines;
 % 
-% % Extract data by removing grid
-% figure, imshow(gridMask);
-% title('Grid mask');
+% % Esegui OCR sull'area specificata
+% ocr_results = ocr(bw_cleaned, [ocr_start_x, 1, area_width, ocr_height], 'TextLayout', 'Block');
 % 
+% % Visualizza i risultati dell'OCR
+% figure;
+% Iocr = insertObjectAnnotation(img, 'rectangle', [ocr_start_x, 1, area_width, ocr_height], 'OCR Area');
+% imshow(Iocr);
+% hold on;
+% plot(1, 1, 'bo', 'MarkerSize', 10, 'LineWidth', 2);
 % 
-% % % Dilatation of smaller points
-% bwImg = imdilate(bwImg,strel("square",1));
+% plot(top_left(1), top_left(2), 'bo', 'MarkerSize', 10, 'LineWidth', 2);
+% plot(top_right(1), top_right(2), 'go', 'MarkerSize', 10, 'LineWidth', 2);
 % 
-% bwImg = bwmorph(bwImg,'bridge',Inf);
+% plot(ocr_start_x,1, 'mo', 'MarkerSize', 10, 'LineWidth', 2);
+% legend('Top Left', 'Top Right', 'Bottom Left', 'Bottom Right');
+% hold off;
+% title('Area per OCR');
+% 
+% % Stampa i risultati dell'OCR
+% disp('Risultati OCR:');
+% disp(ocr_results.Text);
+% 
+% % Visualizza l'immagine pre-elaborata per debug
+% figure;
+% imshow(bw_cleaned);
+% title('Immagine pre-elaborata per OCR');
+% 
 
-% 
-% figure, imshow(bwImg);
-% title('Binary image');
-% 
-% dataOnly = bwImg & ~gridMask;
+
+%% -------------------------------------
+
 
 function [xI, yI] = intersectLines(x1,y1,x2,y2,x3,y3,x4,y4)
 % Computes the intersection point (xI, yI) of two lines defined by
