@@ -149,7 +149,19 @@ else
     bottom_right = bottom_points(1,:);
 end
 
-grid_points= [top_left(1),top_left(2); top_right(1),top_right(2); bottom_left(1), bottom_left(2); bottom_right(1), bottom_right(2)];
+figure;
+imshow(img);
+hold on;
+plot(top_left(1), top_left(2), 'bo', 'MarkerSize', 10, 'LineWidth', 2);
+plot(top_right(1), top_right(2), 'go', 'MarkerSize', 10, 'LineWidth', 2);
+plot(bottom_left(1), bottom_left(2), 'co', 'MarkerSize', 10, 'LineWidth', 2);
+plot(bottom_right(1), bottom_right(2), 'mo', 'MarkerSize', 10, 'LineWidth', 2);
+legend('Top Left', 'Top Right', 'Bottom Left', 'Bottom Right');
+hold off;
+
+grid_points= [top_left(1) top_left(2);top_right(1) top_right(2);
+              bottom_left(1) bottom_left(2); bottom_right(1) bottom_right(2)];
+
 
 % Visualizza i risultati
 %% OCR
@@ -164,32 +176,11 @@ upper_area_width = abs(grid_points(1,1) - img_max_width);
 % Height of the upper OCR area
 upper_area_height = grid_points(1,2) - 1;
 
-% Apply morphological operations
-thinned_img = bwmorph(bin_img, 'thin', Inf);
-
-
-thinned_img =bwmorph(thinned_img,"bridge");
-
-% Fill holes
-thinned_img = imfill(thinned_img, 'holes');
-
-    % thinned_img =imopen(thinned_img,strel("disk",5));
-
-
-% Invert image (dark text on light background)
-thinned_img = imcomplement(thinned_img);
-
-figure;
-imshow(thinned_img);
-title("Upper ocr area");
-
 
 % Perform OCR
-ocr_results = ocr(thinned_img, [grid_points(1,1), 1, upper_area_width, upper_area_height], ...
+ocr_frequency_results = ocr(img, [grid_points(1,1), 1, upper_area_width, upper_area_height], ...
     'LayoutAnalysis', 'Block', 'CharacterSet', "0124568k");
 
-
-ocr_results.Text
 
 
 % Decibel axis
@@ -200,16 +191,11 @@ left_area_width = grid_points(1,1) - 1;
 % Height of the left OCR area
 left_area_height = abs(grid_points(1,2) - img_max_height);
 
-figure;
-imshow(thinned_img);
-title("left ocr area");
-
 % Perform OCR
-ocr_results = ocr(thinned_img, [1,grid_points(1,2), left_area_width, left_area_height], ...
+ocr_decibel_results = ocr(img, [1,grid_points(1,2), left_area_width, left_area_height], ...
     'LayoutAnalysis', 'Block', 'CharacterSet', "01234546789-");
 
 
-ocr_results.Text
 
 % 
 % 
