@@ -195,50 +195,66 @@ left_area_height = abs(grid_points(1,2) - img_max_height);
 ocr_decibel_results = ocr(img, [1,grid_points(1,2), left_area_width, left_area_height], ...
     'LayoutAnalysis', 'Block', 'CharacterSet', "01234546789-");
 
+% % Show the location of the word in the original image.
+% figure
+% Iname = insertObjectAnnotation(img,"rectangle",ocr_decibel_results.WordBoundingBoxes,ocr_decibel_results.Words);
+% imshow(Iname)
+
+% print -10 db coordinates
+Iname = insertObjectAnnotation(img,"rectangle",ocr_decibel_results.WordBoundingBoxes(1,:),ocr_decibel_results.Words{1});
 
 
-% 
-% 
-% % Pre-elaborazione per migliorare l'OCR
-% % Aumenta il contrasto
-% grayImg_enhanced = adapthisteq(grayImg);
-% 
-% % Applica sogliatura adattiva
-% bw = imbinarize(grayImg_enhanced, 'adaptive', 'Sensitivity', 0.6);
-% 
-% % Rimuovi piccoli oggetti
-% % hLines = imopen(~bwImg, strel('line', 30, 0));
-% 
-% % Esegui OCR sull'area specificata
-% ocr_results = ocr(bw_cleaned, [ocr_start_x, 1, area_width, ocr_height], 'TextLayout', 'Block');
-% 
-% % Visualizza i risultati dell'OCR
-% figure;
-% Iocr = insertObjectAnnotation(img, 'rectangle', [ocr_start_x, 1, area_width, ocr_height], 'OCR Area');
-% imshow(Iocr);
-% hold on;
-% plot(1, 1, 'bo', 'MarkerSize', 10, 'LineWidth', 2);
-% 
-% plot(top_left(1), top_left(2), 'bo', 'MarkerSize', 10, 'LineWidth', 2);
-% plot(top_right(1), top_right(2), 'go', 'MarkerSize', 10, 'LineWidth', 2);
-% 
-% plot(ocr_start_x,1, 'mo', 'MarkerSize', 10, 'LineWidth', 2);
-% legend('Top Left', 'Top Right', 'Bottom Left', 'Bottom Right');
-% hold off;
-% title('Area per OCR');
-% 
-% % Stampa i risultati dell'OCR
-% disp('Risultati OCR:');
-% disp(ocr_results.Text);
-% 
-% % Visualizza l'immagine pre-elaborata per debug
-% figure;
-% imshow(bw_cleaned);
-% title('Immagine pre-elaborata per OCR');
-% 
+% debug, printing rectangle point coordinates
+figure;
+imshow(Iname);
+hold on;
+x=ocr_decibel_results.WordBoundingBoxes(1,1);
+y=ocr_decibel_results.WordBoundingBoxes(1,2);
+plot(x,y, 'co', 'MarkerSize', 10, 'LineWidth', 2);
+plot(x+ocr_decibel_results.WordBoundingBoxes(1,3),y, 'go', 'MarkerSize', 10, 'LineWidth', 2);
+plot(x+ocr_decibel_results.WordBoundingBoxes(1,3),y+ocr_decibel_results.WordBoundingBoxes(1,4), 'ro', 'MarkerSize', 10, 'LineWidth', 2);
+plot(x,y+ocr_decibel_results.WordBoundingBoxes(1,4), 'bo', 'MarkerSize', 10, 'LineWidth', 2);
 
 
-%% -------------------------------------
+y_centered_point= ocr_decibel_results.WordBoundingBoxes(1,4)/2;
+plot(x+ocr_decibel_results.WordBoundingBoxes(1,3),y+y_centered_point, 'yo', 'MarkerSize', 10, 'LineWidth', 2);
+
+
+% extract intersection coordinates with the grid lines
+
+num_horiz_lines=14;
+num_vert_lines=13;
+
+horizontal_lines=zeros(num_horiz_lines,4);
+
+% check the number of reveled 
+n=size(ocr_decibel_results.WordBoundingBoxes);
+if n>num_vert_lines
+    n=num_vert_lines;
+end
+
+
+for i=1:n
+
+    point1.x=grid_points(1,1);
+    point1.y= ocr_decibel_results.WordBoundingBoxes(i,2) + (ocr_decibel_results.WordBoundingBoxes(i,4)/2);
+
+    point2.x=grid_points(2,1);
+    point2.y=point1.y;
+
+    horizontal_lines(i,:)=[point1.x,point1.y,point2.x,point2.y];
+
+
+    plot(point1.x,point1.y, 'go', 'MarkerSize', 5, 'LineWidth', 2);
+    plot(point2.x,point2.y, 'go', 'MarkerSize', 5, 'LineWidth', 2);
+    % plot([point1.x,point1.y],[point2.x,point2.y], 'g-', 'LineWidth', 1.5);
+
+end
+
+
+
+
+
 
 
 function [xI, yI] = intersectLines(x1,y1,x2,y2,x3,y3,x4,y4)
@@ -272,4 +288,11 @@ function [xI, yI] = intersectLines(x1,y1,x2,y2,x3,y3,x4,y4)
     % Compute the intersection point using Cramer's rule
     xI = (B2*C1 - B1*C2) / det;
     yI = (A1*C2 - A2*C1) / det;
+    
+    % Check for invalid point coordinates
+    if abs(xI) > 1e3 || abs(yI) > 1e3
+        xI = NaN;
+        yI = NaN;
+    end
+
 end
