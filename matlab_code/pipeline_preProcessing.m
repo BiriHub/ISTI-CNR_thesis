@@ -223,38 +223,81 @@ plot(x+ocr_decibel_results.WordBoundingBoxes(1,3),y+y_centered_point, 'yo', 'Mar
 % extract intersection coordinates with the grid lines
 
 num_horiz_lines=14;
-num_vert_lines=13;
+num_vert_lines=8;
 
 horizontal_lines=zeros(num_horiz_lines,4);
 
-% check the number of reveled 
-n=size(ocr_decibel_results.WordBoundingBoxes);
-if n>num_vert_lines
-    n=num_vert_lines;
-end
+for i=1:num_horiz_lines
 
-
-for i=1:n
-
-    point1.x=grid_points(1,1);
+    point1.x=ocr_decibel_results.WordBoundingBoxes(i,1) + ocr_decibel_results.WordBoundingBoxes(i,3);
     point1.y= ocr_decibel_results.WordBoundingBoxes(i,2) + (ocr_decibel_results.WordBoundingBoxes(i,4)/2);
 
     point2.x=grid_points(2,1);
     point2.y=point1.y;
 
-    horizontal_lines(i,:)=[point1.x,point1.y,point2.x,point2.y];
+    [intersec_X,intersec_Y]= intersectLines(point1.x,point1.y, point2.x,point2.y, grid_points(1,1),grid_points(1,2),grid_points(3,1),grid_points(3,2));
+
+    horizontal_lines(i,:)=[intersec_X,intersec_Y,point2.x,point2.y];
 
 
     plot(point1.x,point1.y, 'go', 'MarkerSize', 5, 'LineWidth', 2);
+    plot(intersec_X,intersec_Y, 'ro', 'MarkerSize', 5, 'LineWidth', 2);
     plot(point2.x,point2.y, 'go', 'MarkerSize', 5, 'LineWidth', 2);
-    % plot([point1.x,point1.y],[point2.x,point2.y], 'g-', 'LineWidth', 1.5);
+
+end
+
+% Vertical lines
+
+vertical_lines=zeros(num_vert_lines,4);
+
+for i=1:num_vert_lines
+
+    point1.x=ocr_frequency_results.WordBoundingBoxes(i,1) + (ocr_frequency_results.WordBoundingBoxes(i,3)/2);
+    point1.y= ocr_frequency_results.WordBoundingBoxes(i,2) + ocr_frequency_results.WordBoundingBoxes(i,4);
+
+    point2.x=point1.x;
+    point2.y=grid_points(3,2);
+
+    [intersec_X,intersec_Y]= intersectLines(point1.x,point1.y, point2.x,point2.y, grid_points(1,1),grid_points(1,2),grid_points(2,1),grid_points(2,2));
+
+    vertical_lines(i,:)=[intersec_X,intersec_Y,point2.x,point2.y];
+
+
+    plot(point1.x,point1.y, 'go', 'MarkerSize', 5, 'LineWidth', 2);
+    plot(intersec_X,intersec_Y, 'ro', 'MarkerSize', 5, 'LineWidth', 2);
+    plot(point2.x,point2.y, 'go', 'MarkerSize', 5, 'LineWidth', 2);
 
 end
 
 
 
+% Find intersections between all grid lines
+grid_lines_intersections= zeros(num_horiz_lines * num_vert_lines,2);
 
+k = 1;
+% For each horizontal line identifies the intersection points for each
+% vertical line that pass through it
+for i = 1:num_horiz_lines    
+    for j = 1:num_vert_lines
+        
+        % compute point
+        [xi, yi] = intersectLines(horizontal_lines(i, 1),horizontal_lines(i, 2),horizontal_lines(i, 3),horizontal_lines(i, 4), ...
+            vertical_lines(j, 1),vertical_lines(j, 2),vertical_lines(j, 3),vertical_lines(j, 4));
+        
+        grid_lines_intersections(k,1) = xi;
+        grid_lines_intersections(k,2) = yi;
+    
 
+        k = k + 1;
+    end
+end
+
+% Print the grid intersection points
+for k = 1:size(grid_lines_intersections,1)
+    plot(grid_lines_intersections(k,1),grid_lines_intersections(k,2), 'yo', 'MarkerSize', 2, 'LineWidth', 2);
+end
+
+hold off;
 
 
 function [xI, yI] = intersectLines(x1,y1,x2,y2,x3,y3,x4,y4)
