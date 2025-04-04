@@ -220,6 +220,52 @@ y_centered_point= ocr_decibel_results.WordBoundingBoxes(1,4)/2;
 plot(x+ocr_decibel_results.WordBoundingBoxes(1,3),y+y_centered_point, 'yo', 'MarkerSize', 10, 'LineWidth', 2);
 
 
+%% Dynamic and improved solution to find intersections
+% assuming that OCR correctly worked
+
+% Testing on -10 decibel line
+
+
+I_adapteq = adapthisteq(grayImg);
+% figure;imshow(I_adapteq);
+
+BW= imbinarize(I_adapteq, 'global');
+
+BW_skel = bwmorph(BW, 'skel');
+
+% BW_lines = imdilate(BW_skel, strel('line',3,0)) | imdilate(BW_skel, strel('line',3,90));
+
+figure;
+imshow(BW_skel);
+
+% Compute the Hough Transform
+[H, theta, rho] = hough(BW_skel);
+
+% Identify the peaks in the Hough transform (number and threshold can be adjusted)
+peaks = houghpeaks(H, 13);
+
+% Extract the detected lines based on the found peaks
+lines = houghlines(edgeMap, theta, rho, peaks);
+
+figure;
+imshow(img);
+hold on;
+for k = 1:length(lines)
+    xy = [lines(k).point1; lines(k).point2];
+    plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', 'green');
+    % Display the starting and ending points of the lines
+    plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
+    plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
+end
+
+title('Lines detected with the Hough Transform');
+hold off;
+
+
+
+
+
+%% Static version
 % extract intersection coordinates with the grid lines
 
 num_horiz_lines=14;
