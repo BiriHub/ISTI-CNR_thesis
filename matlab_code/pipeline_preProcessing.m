@@ -398,127 +398,150 @@ hold off;
 % plot(x+ocr_decibel_results.WordBoundingBoxes(1,3),y+y_centered_point, 'yo', 'MarkerSize', 10, 'LineWidth', 2);
 
 
-%% Dynamic and improved solution to find intersections
-% assuming that OCR correctly worked
+%% Dynamic and improved solution to find grid internal intersections
 
-% Estrazione intersezioni interne della griglia
+%% 
 
-% immagine prodotta da Canny + elaborata con operazioni morfologiche
-
+% Apply the Canny operator to obtain the binary edge map
 bin_img = edge(grayImg, 'Canny');
-% Dilation
-edgeMap = imdilate(bin_img, strel('line',3,0)) | imdilate(bin_img, strel('line',3,90));
 
-edgeMap = imfill(edgeMap, 4, 'holes');
+edgeMap = imdilate(bin_img, strel('line',3,0)) | imdilate(bin_img,strel('line',3,90));
 
-% Extract the perimeter of the grid
-edgeMap = bwmorph(edgeMap, 'remove');
 
-% Increase line size preparing for Hough transformation
 edgeMap = imdilate(edgeMap, strel("square", 3));
 
+edgeMap= bwmorph(edgeMap,'skeleton');
 
 
+% Compute the Hough Transform
 [H, theta, rho] = hough(edgeMap);
-peaks = houghpeaks(H, 4, 'threshold', ceil(0.01 * max(H(:))));
-lines = houghlines(edgeMap, theta, rho, peaks, 'FillGap', 150, 'MinLength',150); % Possibile miglioramento per la ricerca degli estremi, potrei provare a cercare quali tra i valori calcolati con la hough e quelli digitalemnte si comportano meglio e scegliere i migliori
+
+peaks = houghpeaks(H, 30, 'threshold', ceil(0.01 * max(H(:))));
+% Extract the detected lines based on the found peaks
+lines = houghlines(edgeMap, theta, rho, peaks, 'FillGap', 150, 'MinLength', 150);
+
+
+% Filtra le linee non orizzontali e verticali secondo un certo limite
+filteredLines = [];
+angleThreshold = 1; % soglia in gradi (puoi regolarla)
+
+for k = 1:length(lines)
+    % Ottieni l'angolo theta per questa linea
+    currentTheta = lines(k).theta;
+    
+    % Verifica se la linea è quasi orizzontale (vicino a 0° o 180°)
+    isHorizontal = abs(mod(currentTheta, 180)) <= angleThreshold || ...
+                  abs(mod(currentTheta, 180) - 180) <= angleThreshold;
+    
+    % Verifica se la linea è quasi verticale (vicino a 90°)
+    isVertical = abs(mod(currentTheta, 180) - 90) <= angleThreshold;
+        
+    % Conserva solo le linee orizzontali o verticali
+    if isHorizontal || isVertical
+        filteredLines = [filteredLines; lines(k)];
+    end
+end
+
+
 
 figure;
 imshow(img);
 hold on;
-for k = 1:length(lines)
-xy = [lines(k).point1; lines(k).point2];
+for k = 1:length(filteredLines)
+xy = [filteredLines(k).point1; filteredLines(k).point2];
 plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', 'green');
 % Display the starting and ending points of the lines
 plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
 plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
 end
-title('Lines detected with the Hough Transform');
+title('Filteresd Lines detected with the Hough Transform');
 hold off;
 
 
 
 
-
-%% Static version
-% extract intersection coordinates with the grid lines
-
-num_horiz_lines=14;
-num_vert_lines=8;
-
-horizontal_lines=zeros(num_horiz_lines,4);
-
-for i=1:num_horiz_lines
-
-    point1.x=ocr_decibel_results.WordBoundingBoxes(i,1) + ocr_decibel_results.WordBoundingBoxes(i,3);
-    point1.y= ocr_decibel_results.WordBoundingBoxes(i,2) + (ocr_decibel_results.WordBoundingBoxes(i,4)/2);
-
-    point2.x=grid_points(2,1);
-    point2.y=point1.y;
-
-    [intersec_X,intersec_Y]= intersectLines(point1.x,point1.y, point2.x,point2.y, grid_points(1,1),grid_points(1,2),grid_points(3,1),grid_points(3,2));
-
-    horizontal_lines(i,:)=[intersec_X,intersec_Y,point2.x,point2.y];
-
-
-    plot(point1.x,point1.y, 'go', 'MarkerSize', 5, 'LineWidth', 2);
-    plot(intersec_X,intersec_Y, 'ro', 'MarkerSize', 5, 'LineWidth', 2);
-    plot(point2.x,point2.y, 'go', 'MarkerSize', 5, 'LineWidth', 2);
-
-end
-
-% Vertical lines
-
-vertical_lines=zeros(num_vert_lines,4);
-
-for i=1:num_vert_lines
-
-    point1.x=ocr_frequency_results.WordBoundingBoxes(i,1) + (ocr_frequency_results.WordBoundingBoxes(i,3)/2);
-    point1.y= ocr_frequency_results.WordBoundingBoxes(i,2) + ocr_frequency_results.WordBoundingBoxes(i,4);
-
-    point2.x=point1.x;
-    point2.y=grid_points(3,2);
-
-    [intersec_X,intersec_Y]= intersectLines(point1.x,point1.y, point2.x,point2.y, grid_points(1,1),grid_points(1,2),grid_points(2,1),grid_points(2,2));
-
-    vertical_lines(i,:)=[intersec_X,intersec_Y,point2.x,point2.y];
-
-
-    plot(point1.x,point1.y, 'go', 'MarkerSize', 5, 'LineWidth', 2);
-    plot(intersec_X,intersec_Y, 'ro', 'MarkerSize', 5, 'LineWidth', 2);
-    plot(point2.x,point2.y, 'go', 'MarkerSize', 5, 'LineWidth', 2);
-
-end
-
-
-
-% Find intersections between all grid lines
-grid_lines_intersections= zeros(num_horiz_lines * num_vert_lines,2);
-
-k = 1;
-% For each horizontal line identifies the intersection points for each
-% vertical line that pass through it
-for i = 1:num_horiz_lines    
-    for j = 1:num_vert_lines
-        
-        % compute point
-        [xi, yi] = intersectLines(horizontal_lines(i, 1),horizontal_lines(i, 2),horizontal_lines(i, 3),horizontal_lines(i, 4), ...
-            vertical_lines(j, 1),vertical_lines(j, 2),vertical_lines(j, 3),vertical_lines(j, 4));
-        
-        grid_lines_intersections(k,1) = xi;
-        grid_lines_intersections(k,2) = yi;
-    
-
-        k = k + 1;
-    end
-end
-
-
-for k = 1:size(grid_lines_intersections,1)
-    plot(grid_lines_intersections(k,1),grid_lines_intersections(k,2), 'yo', 'MarkerSize', 2, 'LineWidth', 2);
-end
-
-hold off;
+% 
+% 
+% 
+% %% Static version
+% % extract intersection coordinates with the grid lines
+% 
+% num_horiz_lines=14;
+% num_vert_lines=8;
+% 
+% horizontal_lines=zeros(num_horiz_lines,4);
+% 
+% for i=1:num_horiz_lines
+% 
+%     point1.x=ocr_decibel_results.WordBoundingBoxes(i,1) + ocr_decibel_results.WordBoundingBoxes(i,3);
+%     point1.y= ocr_decibel_results.WordBoundingBoxes(i,2) + (ocr_decibel_results.WordBoundingBoxes(i,4)/2);
+% 
+%     point2.x=grid_points(2,1);
+%     point2.y=point1.y;
+% 
+%     [intersec_X,intersec_Y]= intersectLines(point1.x,point1.y, point2.x,point2.y, grid_points(1,1),grid_points(1,2),grid_points(3,1),grid_points(3,2));
+% 
+%     horizontal_lines(i,:)=[intersec_X,intersec_Y,point2.x,point2.y];
+% 
+% 
+%     plot(point1.x,point1.y, 'go', 'MarkerSize', 5, 'LineWidth', 2);
+%     plot(intersec_X,intersec_Y, 'ro', 'MarkerSize', 5, 'LineWidth', 2);
+%     plot(point2.x,point2.y, 'go', 'MarkerSize', 5, 'LineWidth', 2);
+% 
+% end
+% 
+% % Vertical lines
+% 
+% vertical_lines=zeros(num_vert_lines,4);
+% 
+% for i=1:num_vert_lines
+% 
+%     point1.x=ocr_frequency_results.WordBoundingBoxes(i,1) + (ocr_frequency_results.WordBoundingBoxes(i,3)/2);
+%     point1.y= ocr_frequency_results.WordBoundingBoxes(i,2) + ocr_frequency_results.WordBoundingBoxes(i,4);
+% 
+%     point2.x=point1.x;
+%     point2.y=grid_points(3,2);
+% 
+%     [intersec_X,intersec_Y]= intersectLines(point1.x,point1.y, point2.x,point2.y, grid_points(1,1),grid_points(1,2),grid_points(2,1),grid_points(2,2));
+% 
+%     vertical_lines(i,:)=[intersec_X,intersec_Y,point2.x,point2.y];
+% 
+% 
+%     plot(point1.x,point1.y, 'go', 'MarkerSize', 5, 'LineWidth', 2);
+%     plot(intersec_X,intersec_Y, 'ro', 'MarkerSize', 5, 'LineWidth', 2);
+%     plot(point2.x,point2.y, 'go', 'MarkerSize', 5, 'LineWidth', 2);
+% 
+% end
+% 
+% 
+% 
+% % Find intersections between all grid lines
+% grid_lines_intersections= zeros(num_horiz_lines * num_vert_lines,2);
+% 
+% k = 1;
+% % For each horizontal line identifies the intersection points for each
+% % vertical line that pass through it
+% for i = 1:num_horiz_lines    
+%     for j = 1:num_vert_lines
+% 
+%         % compute point
+%         [xi, yi] = intersectLines(horizontal_lines(i, 1),horizontal_lines(i, 2),horizontal_lines(i, 3),horizontal_lines(i, 4), ...
+%             vertical_lines(j, 1),vertical_lines(j, 2),vertical_lines(j, 3),vertical_lines(j, 4));
+% 
+%         grid_lines_intersections(k,1) = xi;
+%         grid_lines_intersections(k,2) = yi;
+% 
+% 
+%         k = k + 1;
+%     end
+% end
+% 
+% % Print the grid intersection points
+% for k = 1:size(grid_lines_intersections,1)
+%     plot(grid_lines_intersections(k,1),grid_lines_intersections(k,2), 'yo', 'MarkerSize', 2, 'LineWidth', 2);
+% end
+% 
+% hold off;
 
 
 function [xI, yI] = intersectLines(x1,y1,x2,y2,x3,y3,x4,y4)
