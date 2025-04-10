@@ -457,6 +457,9 @@ end
 title('Filteresd Lines detected with the Hough Transform');
 hold off;
 
+%% Look for the intersection between grid corner lines
+num_horiz_lines = 16;
+num_vert_lines  = 15;
 
 
 
