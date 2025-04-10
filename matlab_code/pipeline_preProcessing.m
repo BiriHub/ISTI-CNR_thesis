@@ -191,71 +191,248 @@ edgeMap = imdilate(bin_img, strel('line',3,0)) | imdilate(bin_img,strel('line',3
 edgeMap = imdilate(edgeMap, strel("square", 3));
 
 edgeMap= bwmorph(edgeMap,'skeleton');
+
+
 % Compute the Hough Transform
+[H, theta, rho] = hough(edgeMap);
+% Identify the peaks in the Hough transform (number and threshold can beadjusted)
+%peaks = houghpeaks(H, 4);
+peaks = houghpeaks(H, 30, 'threshold', ceil(0.01 * max(H(:))));
+% Extract the detected lines based on the found peaks
+hough_internal_lines = houghlines(edgeMap, theta, rho, peaks, 'FillGap', 150, 'MinLength', 150);
+
+
+% Filtra le linee non orizzontali e verticali secondo un certo limite
+filteredLines = [];
+angleThreshold = 1; % soglia in gradi (puoi regolarla)
+
+for k = 1:length(hough_internal_lines)
+    % Ottieni l'angolo theta per questa linea
+    currentTheta = hough_internal_lines(k).theta;
+    
+    % Verifica se la linea è quasi orizzontale (vicino a 0° o 180°)
+    isHorizontal = abs(mod(currentTheta, 180)) <= angleThreshold || ...
+                  abs(mod(currentTheta, 180) - 180) <= angleThreshold;
+    
+    % Verifica se la linea è quasi verticale (vicino a 90°)
+    isVertical = abs(mod(currentTheta, 180) - 90) <= angleThreshold;
+    
+    % Conserva solo le linee orizzontali o verticali
+    if isHorizontal || isVertical
+        filteredLines = [filteredLines; hough_internal_lines(k)];
+    end
+end
+
+
+% DEBUG %
+figure;
+imshow(img);
+hold on;
+for k = 1:length(hough_grid_lines)
+xy = [hough_grid_lines(k).point1; hough_grid_lines(k).point2];
+plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', 'blue');
+% Display the starting and ending points of the lines
+plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
+plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
+end
+hold on;
+for k = 1:length(filteredLines)
+xy = [filteredLines(k).point1; filteredLines(k).point2];
+plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', 'green');
+% Display the starting and ending points of the lines
+plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
+plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
+end
+title('ALL Lines detected by the Hough Transform');
+hold off;
+
+
+
+
+%% Estimation of Grid corners
+% calculated on the mean between detected points with Hough and digital
+% intersection points 
+
+
+hough_points = [];
+for i = 1:length(lines)
+    hough_points = [hough_points; 
+                   lines(i).point1;
+                   lines(i).point2];
+end
+
+% 1. Filtra i punti fuori dalle aree OCR
+
+% Get the left-lower corner of the first frequency number (125)
+% [x , y+height]
+left_lower_boundingBox_first_freq = [ocr_frequency_results.WordBoundingBoxes(1,1), ocr_frequency_results.WordBoundingBoxes(1,2)+ocr_frequency_results.WordBoundingBoxes(1,4)];
+
+
+% Get the right-lower corner of the last frequency number (16k)
+% [x +width, y+height]
+%Note : this is used as a double check to be completely sure that the
+%points are valid
+right_lower_boundingBox_last_freq = [ocr_frequency_results.WordBoundingBoxes(end,1)+ocr_frequency_results.WordBoundingBoxes(end,3), ocr_frequency_results.WordBoundingBoxes(end,2)+ocr_frequency_results.WordBoundingBoxes(end,4)];
+
+% Get the right-upper corner of the first decibel number (-10)
+% [x+weight , y]
+right_upper_boundingBox_first_dec = [ocr_decibel_results.WordBoundingBoxes(1,1)+ocr_decibel_results.WordBoundingBoxes(1,3), ocr_decibel_results.WordBoundingBoxes(1,2)];
+
+% Get the right-lower corner of the last decibel number (120)
+% [x +width, y+height]
+%Note : this is used as a double check to be completely sure that the
+%points are valid
+right_lower_boundingBox_last_dec = [ocr_decibel_results.WordBoundingBoxes(end,1)+ocr_decibel_results.WordBoundingBoxes(end,3), ocr_decibel_results.WordBoundingBoxes(end,2)+ocr_decibel_results.WordBoundingBoxes(end,4)];
+
+
+valid_points = [];
+for i = 1:size(hough_points, 1)
+    point = hough_points(i, :);
+    
+    % Verifica se il punto è nell'area OCR superiore (frequenze)
+    in_upper_ocr = (point(1) > left_lower_boundingBox_first_freq(1) && point(2) < left_lower_boundingBox_first_freq(2));
+    
+    % Verifica se il punto è nell'area OCR sinistra (decibel)
+    in_left_ocr = (point(1) <= right_upper_boundingBox_first_dec(1) && point(2) >= right_upper_boundingBox_first_dec(2));
+    
+    % Se il punto non è in nessuna delle due aree OCR, è valido
+    if ~in_upper_ocr && ~in_left_ocr
+        valid_points = [valid_points; point];
+    end
+end
+
+
+
+
+% 2. Trova i punti più vicini ai quattro estremi della griglia
+
+max_point_distance=5; % 5 pixels
+
+% 3. Calcola la media tra le coordinate originali e quelle stimate dalla Hough
+refined_grid_points = zeros(4, 2);
+for i = 1:4
+    
+    % Extract the closest point
+    idx = knnsearch(valid_points, grid_points(i,:));
+    
+    % Save the closest point
+    % refined_grid_points(i,:)= valid_points(idx, :);
+    
+    check_point=(grid_points(i,:)*20 + valid_points(idx, :)*80) / 100;
+    
+    refined_grid_points(i,:) = grid_points(i,:);
+    if(abs(check_point - grid_points(i,:))<=max_point_distance)
+    refined_grid_points(i,:) = check_point;
+    end
+    % TODO: ask to teacher if this technique based on the distance between
+    % points is valid or not
+
+end
+
+% TODO: check if using these "max and min" are properly for the task and
+% whether they are optimal for many cases. Most likely each points require
+% different checks 
+
+% refined_grid_points(1,:)= min(grid_points(1,:),refined_grid_points(1,:));
+% refined_grid_points(2,:)= [max(grid_points(2,1),refined_grid_points(2,1)),min(grid_points(2,2),refined_grid_points(2,2))];
+% refined_grid_points(3,:)= [min(grid_points(3,1),refined_grid_points(3,1)),max(grid_points(3,2),refined_grid_points(3,2))];
+% refined_grid_points(4,:)= max(grid_points(4,:),refined_grid_points(4,:));
+
+
+
+% DEBUG
+figure;
+imshow(img);
+hold on;
+
+% Disegna i punti originali
+plot(grid_points(:,1), grid_points(:,2), 'ro', 'MarkerSize', 1, 'LineWidth', 2);
+
+% % Disegna i punti validi dalla trasformata di Hough
+% for i = 1:size(valid_points, 1)
+%     plot(valid_points(i,1), valid_points(i,2), 'g.', 'MarkerSize', 6);
+% end
+
+% % Disegna i punti più vicini identificati
+% plot(closest_points(:,1), closest_points(:,2), 'bx', 'MarkerSize', 12, 'LineWidth', 2);
+
+% Disegna i punti raffinati (media)
+plot(refined_grid_points(:,1), refined_grid_points(:,2), 'mo', 'MarkerSize', 8, 'LineWidth', 2);
+
+
+
+
+% legend('Digital Grid corners', 'Punti raffinati');
+title('Adjusted grid corners');
+
+hold on;
+plot(top_left(1), top_left(2), 'bo', 'MarkerSize', 10, 'LineWidth', 1);
+plot(top_right(1), top_right(2), 'go', 'MarkerSize', 10, 'LineWidth', 1);
+plot(bottom_left(1), bottom_left(2), 'co', 'MarkerSize', 10, 'LineWidth', 1);
+plot(bottom_right(1), bottom_right(2), 'mo', 'MarkerSize', 10, 'LineWidth', 1);
+hold off;
 
 % % Show the location of the word in the original image.
 % figure
 % Iname = insertObjectAnnotation(img,"rectangle",ocr_decibel_results.WordBoundingBoxes,ocr_decibel_results.Words);
 % imshow(Iname)
 
-% print -10 db coordinates
-Iname = insertObjectAnnotation(img,"rectangle",ocr_decibel_results.WordBoundingBoxes(1,:),ocr_decibel_results.Words{1});
-
-
-% debug, printing rectangle point coordinates
-figure;
-imshow(Iname);
-hold on;
-x=ocr_decibel_results.WordBoundingBoxes(1,1);
-y=ocr_decibel_results.WordBoundingBoxes(1,2);
-plot(x,y, 'co', 'MarkerSize', 10, 'LineWidth', 2);
-plot(x+ocr_decibel_results.WordBoundingBoxes(1,3),y, 'go', 'MarkerSize', 10, 'LineWidth', 2);
-plot(x+ocr_decibel_results.WordBoundingBoxes(1,3),y+ocr_decibel_results.WordBoundingBoxes(1,4), 'ro', 'MarkerSize', 10, 'LineWidth', 2);
-plot(x,y+ocr_decibel_results.WordBoundingBoxes(1,4), 'bo', 'MarkerSize', 10, 'LineWidth', 2);
-
-
-y_centered_point= ocr_decibel_results.WordBoundingBoxes(1,4)/2;
-plot(x+ocr_decibel_results.WordBoundingBoxes(1,3),y+y_centered_point, 'yo', 'MarkerSize', 10, 'LineWidth', 2);
+% % print -10 db coordinates
+% DEBUG
+% Iname = insertObjectAnnotation(img,"rectangle",ocr_decibel_results.WordBoundingBoxes(1,:),ocr_decibel_results.Words{1});
+% 
+% 
+% % debug, printing rectangle point coordinates
+% figure;
+% imshow(Iname);
+% hold on;
+% x=ocr_decibel_results.WordBoundingBoxes(1,1);
+% y=ocr_decibel_results.WordBoundingBoxes(1,2);
+% plot(x,y, 'co', 'MarkerSize', 10, 'LineWidth', 2);
+% plot(x+ocr_decibel_results.WordBoundingBoxes(1,3),y, 'go', 'MarkerSize', 10, 'LineWidth', 2);
+% plot(x+ocr_decibel_results.WordBoundingBoxes(1,3),y+ocr_decibel_results.WordBoundingBoxes(1,4), 'ro', 'MarkerSize', 10, 'LineWidth', 2);
+% plot(x,y+ocr_decibel_results.WordBoundingBoxes(1,4), 'bo', 'MarkerSize', 10, 'LineWidth', 2);
+% 
+% 
+% y_centered_point= ocr_decibel_results.WordBoundingBoxes(1,4)/2;
+% plot(x+ocr_decibel_results.WordBoundingBoxes(1,3),y+y_centered_point, 'yo', 'MarkerSize', 10, 'LineWidth', 2);
 
 
 %% Dynamic and improved solution to find intersections
 % assuming that OCR correctly worked
 
-% Testing on -10 decibel line
+% Estrazione intersezioni interne della griglia
+
+% immagine prodotta da Canny + elaborata con operazioni morfologiche
+
+bin_img = edge(grayImg, 'Canny');
+% Dilation
+edgeMap = imdilate(bin_img, strel('line',3,0)) | imdilate(bin_img, strel('line',3,90));
+
+edgeMap = imfill(edgeMap, 4, 'holes');
+
+% Extract the perimeter of the grid
+edgeMap = bwmorph(edgeMap, 'remove');
+
+% Increase line size preparing for Hough transformation
+edgeMap = imdilate(edgeMap, strel("square", 3));
 
 
-I_adapteq = adapthisteq(grayImg);
-% figure;imshow(I_adapteq);
 
-BW= imbinarize(I_adapteq, 'global');
-
-BW_skel = bwmorph(BW, 'skel');
-
-% BW_lines = imdilate(BW_skel, strel('line',3,0)) | imdilate(BW_skel, strel('line',3,90));
-
-figure;
-imshow(BW_skel);
-
-% Compute the Hough Transform
-[H, theta, rho] = hough(BW_skel);
-
-% Identify the peaks in the Hough transform (number and threshold can be adjusted)
-peaks = houghpeaks(H, 13);
-
-% Extract the detected lines based on the found peaks
-lines = houghlines(edgeMap, theta, rho, peaks);
+[H, theta, rho] = hough(edgeMap);
+peaks = houghpeaks(H, 4, 'threshold', ceil(0.01 * max(H(:))));
+lines = houghlines(edgeMap, theta, rho, peaks, 'FillGap', 150, 'MinLength',150); % Possibile miglioramento per la ricerca degli estremi, potrei provare a cercare quali tra i valori calcolati con la hough e quelli digitalemnte si comportano meglio e scegliere i migliori
 
 figure;
 imshow(img);
 hold on;
 for k = 1:length(lines)
-    xy = [lines(k).point1; lines(k).point2];
-    plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', 'green');
-    % Display the starting and ending points of the lines
-    plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
-    plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
+xy = [lines(k).point1; lines(k).point2];
+plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', 'green');
+% Display the starting and ending points of the lines
+plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
+plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
 end
-
 title('Lines detected with the Hough Transform');
 hold off;
 
