@@ -3,90 +3,53 @@
 clc; clear; close all;
 
 % Load image
-img = imread('Noah_01_02_01.jpg');
+img = imread('Noah_01_01_01.jpg');
 grayImg = rgb2gray(img);
 grayImg = medfilt2(grayImg); % median filter to reduce errors (3 by 3)
 
-%% 2. Edge-detection with Canny's algorithm
+% Edge-detection with Canny's algorithm + Morphologycal operations
+
 % Apply the Canny operator to obtain the binary edge map
 bin_img = edge(grayImg, 'Canny');
 
-% Debug
-% figure;
-% imshow(edgeMap);
-% title('Edge Map (Canny)');
+% Preparing the image before applying th Hough transformation to identify
+% an approxymation of grid corners
 
 % Dilation
 edgeMap = imdilate(bin_img, strel('line',3,0)) | imdilate(bin_img, strel('line',3,90));
 
-% Debug
-% figure;
-% imshow(edgeMap);
-% title('After imdilate');
-% 
-% % After dilation
-% edgeMap = imclose(edgeMap, strel('disk', 1));
-% % edgeMap = bwmorph(edgeMap, 'bridge');
-% edgeMap = bwmorph(edgeMap, 'clean');
-% 
-% edgeMap = bwmorph(edgeMap, 'thicken');
-% 
-% figure;
-% imshow(edgeMap);
-% title('Clean + Thicken');
-% 
-% edgeMap = bwmorph(edgeMap, 'spur');
-% 
-% figure;
-% imshow(edgeMap);
-% title('+ Spur');
-
 edgeMap = imfill(edgeMap, 4, 'holes');
-
-% Visualization
-% figure;
-% imshow(edgeMap);
-% title('After Morphological Smoothing');
 
 % Extract the perimeter of the grid
 edgeMap = bwmorph(edgeMap, 'remove');
 
-% figure;
-% imshow(edgeMap);
-% title('After remove');
-
 % Increase line size preparing for Hough transformation
 edgeMap = imdilate(edgeMap, strel("square", 3));
 
-% Debug
-% figure;
-% imshow(edgeMap);
-% title('After imdilate');
-
-%% 3. Application of the Hough Transform for Line Detection
-% Compute the Hough Transform
+% Compute the Hough Transform to extract an approssimation of the grid
+% points
 [H, theta, rho] = hough(edgeMap);
 
 % Identify the peaks in the Hough transform (number and threshold can be adjusted)
 peaks = houghpeaks(H, 4);
 
 % Extract the detected lines based on the found peaks
-lines = houghlines(edgeMap, theta, rho, peaks, 'FillGap', 40);
+lines = houghlines(edgeMap, theta, rho, peaks, 'FillGap', 40,'MinLength',150);
 
-%% 4. Visualization of the Results
-figure;
-imshow(img);
-hold on;
-for k = 1:length(lines)
-    xy = [lines(k).point1; lines(k).point2];
-    plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', 'green');
-    % Display the starting and ending points of the lines
-    plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
-    plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
-end
-
-title('Lines detected with the Hough Transform');
-hold off;
+% DEBUG
+% figure;
+% imshow(img);
+% hold on;
+% for k = 1:length(lines)
+%     xy = [lines(k).point1; lines(k).point2];
+%     plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', 'green');
+%     % Display the starting and ending points of the lines
+%     plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
+%     plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
+% end
+% 
+% title('Lines detected with the Hough Transform');
+% hold off;
 
 %% Identify intersection points between detected segments
 
@@ -121,13 +84,14 @@ for i = 1:num_lines
     end
 end
 
-% Combina le coordinate in una matrice [x, y]
+% Combine coordinates in a new matrix 
 points = [point_intersec_x(:) point_intersec_y(:)];
 
-% Ordina le righe in base alla coordinata y (crescente)
-points_sorted = sortrows(points, 2);  % i primi due punti sono quelli "in alto"
+% Sort rows in an ascending order on coordinate Y
+points_sorted = sortrows(points, 2);  
 
-% Separa i due gruppi: top (punti con y minori) e bottom (punti con y maggiori)
+% Separate the points in two different groups based on their location on
+% the image
 top_points = points_sorted(1:2, :);
 bottom_points = points_sorted(3:4, :);
 
@@ -149,6 +113,7 @@ else
     bottom_right = bottom_points(1,:);
 end
 
+%DEBUG
 figure;
 imshow(img);
 hold on;
@@ -163,7 +128,6 @@ grid_points= [top_left(1) top_left(2);top_right(1) top_right(2);
               bottom_left(1) bottom_left(2); bottom_right(1) bottom_right(2)];
 
 
-% Visualizza i risultati
 %% OCR
 [img_max_height,img_max_width]= size(grayImg);
 
@@ -194,6 +158,40 @@ left_area_height = abs(grid_points(1,2) - img_max_height);
 % Perform OCR
 ocr_decibel_results = ocr(img, [1,grid_points(1,2), left_area_width, left_area_height], ...
     'LayoutAnalysis', 'Block', 'CharacterSet', "01234546789-");
+
+
+%% Extraction of grid intersections only with Hough transformation
+
+
+bin_img = edge(grayImg, 'Canny');
+% Dilation
+edgeMap = imdilate(bin_img, strel('line',3,0)) | imdilate(bin_img, strel('line',3,90));
+
+edgeMap = imfill(edgeMap, 4, 'holes');
+
+% Extract the perimeter of the grid
+edgeMap = bwmorph(edgeMap, 'remove');
+
+% Increase line size preparing for Hough transformation
+edgeMap = imdilate(edgeMap, strel("square", 3));
+
+
+% Apply Hough transformation to identify the grid axis
+[H, theta, rho] = hough(edgeMap);
+peaks = houghpeaks(H, 4, 'threshold', ceil(0.01 * max(H(:))));
+hough_grid_lines = houghlines(edgeMap, theta, rho, peaks, 'FillGap', 150, 'MinLength',150); 
+
+
+% Apply the Canny operator to obtain the binary edge map
+bin_img = edge(grayImg, 'Canny');
+
+edgeMap = imdilate(bin_img, strel('line',3,0)) | imdilate(bin_img,strel('line',3,90));
+
+
+edgeMap = imdilate(edgeMap, strel("square", 3));
+
+edgeMap= bwmorph(edgeMap,'skeleton');
+% Compute the Hough Transform
 
 % % Show the location of the word in the original image.
 % figure
@@ -338,7 +336,7 @@ for i = 1:num_horiz_lines
     end
 end
 
-% Print the grid intersection points
+
 for k = 1:size(grid_lines_intersections,1)
     plot(grid_lines_intersections(k,1),grid_lines_intersections(k,2), 'yo', 'MarkerSize', 2, 'LineWidth', 2);
 end
