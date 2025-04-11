@@ -261,7 +261,7 @@ for i = 1:length(lines)
                    lines(i).point2];
 end
 
-% 1. Filtra i punti fuori dalle aree OCR
+% 1. Filter points in the OCR area
 
 % Get the left-lower corner of the first frequency number (125)
 % [x , y+height]
@@ -289,13 +289,13 @@ valid_points = [];
 for i = 1:size(hough_points, 1)
     point = hough_points(i, :);
     
-    % Verifica se il punto è nell'area OCR superiore (frequenze)
+    % Check if the point is below the frequency text area
     in_upper_ocr = (point(1) > left_lower_boundingBox_first_freq(1) && point(2) < left_lower_boundingBox_first_freq(2));
     
-    % Verifica se il punto è nell'area OCR sinistra (decibel)
+    % Check if the point is on the right of decibel text area
     in_left_ocr = (point(1) <= right_upper_boundingBox_first_dec(1) && point(2) >= right_upper_boundingBox_first_dec(2));
     
-    % Se il punto non è in nessuna delle due aree OCR, è valido
+    % Check if the point is valid
     if ~in_upper_ocr && ~in_left_ocr
         valid_points = [valid_points; point];
     end
@@ -304,98 +304,93 @@ end
 
 
 
-% 2. Trova i punti più vicini ai quattro estremi della griglia
+% Find the closest point to grid corners
 
-max_point_distance=5; % 5 pixels
+%Threshold
+max_point_distance=5 ; % 5 pixels
 
-% 3. Calcola la media tra le coordinate originali e quelle stimate dalla Hough
+% Save the positive pixel in the binary image
+[bin_x, bin_y] = find(bin_img==1); 
+points=[bin_y,bin_x];
+
 refined_grid_points = zeros(4, 2);
 for i = 1:4
     
     % Extract the closest point
     idx = knnsearch(valid_points, grid_points(i,:));
-    
-    % Save the closest point
-    % refined_grid_points(i,:)= valid_points(idx, :);
-    
-    check_point=(grid_points(i,:)*20 + valid_points(idx, :)*80) / 100;
-    
-    refined_grid_points(i,:) = grid_points(i,:);
-    if(abs(check_point - grid_points(i,:))<=max_point_distance)
-    refined_grid_points(i,:) = check_point;
+
+    % If the valid closest hough point is too far from the estimated digital grid
+    % point
+    if(norm(valid_points(idx, :) - grid_points(i,:))>max_point_distance)
+        refined_grid_points(i,:) = grid_points(i,:);
+        continue;
     end
-    % TODO: ask to teacher if this technique based on the distance between
-    % points is valid or not
+        
+    % Select best point between valid and digital one
+
+    % First point : extract the distance between the valid point and the closest
+    % pixel of the grid corner
+    [ind1 , distance1]= knnsearch(points, valid_points(idx, :));
+
+    % Second point : extract the distance between the digital point and the closest
+    % pixel of the grid corner
+    [ind2, distance2]= knnsearch(points, grid_points(i,:));
+
+    % Hough valid point is too far from the grid, so digital value is the best
+    % approximation of the image grid
+    if(distance1>max_point_distance )
+        refined_grid_points(i,:) = grid_points(i,:);
+    continue;
+
+    % Digital point is too far from the grid, so hough point is the best
+    % approximation of the image grid
+    elseif(distance2>max_point_distance)
+        refined_grid_points(i,:) = valid_points(idx, :);
+    continue;
+
+    end
+
+    % Whether both points are valid according to the threshold, following
+    % instructions verify which is the best choice to take into account
+
+    % Extract the hough detected point given it iz
+    if(distance1==distance2)
+        refined_grid_points(i,:) = valid_points(idx, :);
+        continue;
+    end
+
+    % Extract the minor distance
+    switch(min(distance1,distance2))
+        case distance1
+            refined_grid_points(i,:) = valid_points(idx, :);
+        case distance2
+            refined_grid_points(i,:) = grid_points(i,:);
+    end
 
 end
 
-% TODO: check if using these "max and min" are properly for the task and
-% whether they are optimal for many cases. Most likely each points require
-% different checks 
 
-% refined_grid_points(1,:)= min(grid_points(1,:),refined_grid_points(1,:));
-% refined_grid_points(2,:)= [max(grid_points(2,1),refined_grid_points(2,1)),min(grid_points(2,2),refined_grid_points(2,2))];
-% refined_grid_points(3,:)= [min(grid_points(3,1),refined_grid_points(3,1)),max(grid_points(3,2),refined_grid_points(3,2))];
-% refined_grid_points(4,:)= max(grid_points(4,:),refined_grid_points(4,:));
-
-
-
-% DEBUG
-figure;
-imshow(img);
-hold on;
-
-% Disegna i punti originali
-plot(grid_points(:,1), grid_points(:,2), 'ro', 'MarkerSize', 1, 'LineWidth', 2);
-
-% % Disegna i punti validi dalla trasformata di Hough
-% for i = 1:size(valid_points, 1)
-%     plot(valid_points(i,1), valid_points(i,2), 'g.', 'MarkerSize', 6);
-% end
-
-% % Disegna i punti più vicini identificati
-% plot(closest_points(:,1), closest_points(:,2), 'bx', 'MarkerSize', 12, 'LineWidth', 2);
-
-% Disegna i punti raffinati (media)
-plot(refined_grid_points(:,1), refined_grid_points(:,2), 'mo', 'MarkerSize', 8, 'LineWidth', 2);
-
-
-
-
-% legend('Digital Grid corners', 'Punti raffinati');
-title('Adjusted grid corners');
-
-hold on;
-plot(top_left(1), top_left(2), 'bo', 'MarkerSize', 10, 'LineWidth', 1);
-plot(top_right(1), top_right(2), 'go', 'MarkerSize', 10, 'LineWidth', 1);
-plot(bottom_left(1), bottom_left(2), 'co', 'MarkerSize', 10, 'LineWidth', 1);
-plot(bottom_right(1), bottom_right(2), 'mo', 'MarkerSize', 10, 'LineWidth', 1);
-hold off;
-
-% % Show the location of the word in the original image.
-% figure
-% Iname = insertObjectAnnotation(img,"rectangle",ocr_decibel_results.WordBoundingBoxes,ocr_decibel_results.Words);
-% imshow(Iname)
-
-% % print -10 db coordinates
-% DEBUG
-% Iname = insertObjectAnnotation(img,"rectangle",ocr_decibel_results.WordBoundingBoxes(1,:),ocr_decibel_results.Words{1});
-% 
-% 
-% % debug, printing rectangle point coordinates
+%% 
+% % DEBUG
 % figure;
-% imshow(Iname);
+% imshow(bin_img);
 % hold on;
-% x=ocr_decibel_results.WordBoundingBoxes(1,1);
-% y=ocr_decibel_results.WordBoundingBoxes(1,2);
-% plot(x,y, 'co', 'MarkerSize', 10, 'LineWidth', 2);
-% plot(x+ocr_decibel_results.WordBoundingBoxes(1,3),y, 'go', 'MarkerSize', 10, 'LineWidth', 2);
-% plot(x+ocr_decibel_results.WordBoundingBoxes(1,3),y+ocr_decibel_results.WordBoundingBoxes(1,4), 'ro', 'MarkerSize', 10, 'LineWidth', 2);
-% plot(x,y+ocr_decibel_results.WordBoundingBoxes(1,4), 'bo', 'MarkerSize', 10, 'LineWidth', 2);
+% 
+% % % Plot digital grid corner points
+% plot(grid_points(:,1), grid_points(:,2), 'mo', 'MarkerSize', 8, 'LineWidth', 2);
+% 
+% % Plot refined points 
+% plot(refined_grid_points(:,1), refined_grid_points(:,2), 'rx', 'MarkerSize', 8, 'LineWidth', 2);
+% 
+% plot(points(ind1,1), points(ind1,2), 'bx', 'MarkerSize', 8, 'LineWidth', 2);
+% plot(points(ind2,1), points(ind2,2), 'bx', 'MarkerSize', 8, 'LineWidth', 2);
+% 
+% plot(points(:,1), points(:,2), 'gx', 'MarkerSize', 1, 'LineWidth', 2);
 % 
 % 
-% y_centered_point= ocr_decibel_results.WordBoundingBoxes(1,4)/2;
-% plot(x+ocr_decibel_results.WordBoundingBoxes(1,3),y+y_centered_point, 'yo', 'MarkerSize', 10, 'LineWidth', 2);
+% 
+% % legend('Digital Grid corners', 'Punti raffinati');
+% title('Adjusted grid corners');
 
 
 %% Dynamic and improved solution to find grid internal intersections
