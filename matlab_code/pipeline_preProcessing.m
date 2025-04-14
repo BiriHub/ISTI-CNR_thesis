@@ -537,6 +537,65 @@ for i = 1:length(grid_corner_lines)
     end
 end
 
+k
+% Identify internal intersections between horizontal and vertical lines
+
+
+% k = 1;  % index to save intersection
+% % internal_intersect_grid=[];
+
+
+% Idea: for each horizontal line I look for the intersection points between
+% the vertical segments that pass through it
+
+for i = 1:length(horizontal_lines)
+
+    % Horizontal segment
+    seg1_x = [horizontal_lines(i,1), horizontal_lines(i,3)];
+    seg1_y = [horizontal_lines(i,2), horizontal_lines(i,4)];
+    
+    for j=1:length(vertical_lines)
+        % All vertical segments
+        seg2_x = [vertical_lines(j,1), vertical_lines(j,3)];
+        seg2_y = [vertical_lines(j,2),vertical_lines(j,4)];
+        
+        % For each vertical line it compute the polyline
+        [xi, yi] = polyxpoly(seg1_x, seg1_y, seg2_x, seg2_y);
+        
+        if ~isempty(xi)
+            % Salva l'intersezione (se polyxpoly restituisce più punti, prendi il primo)
+            intersectionPoints(k, :) = [xi(1), yi(1)];
+            k = k + 1;
+        end
+    end
+end
+
+%% DEBUG
+% % Crea una nuova figura
+% figure;
+% imshow(grayImg);
+% hold on;  % Abilita la sovrapposizione dei plot
+% 
+% % Plot delle linee orizzontali (in rosso)
+% numHorizLines = size(horizontal_lines, 1);
+% for i = 1:numHorizLines
+%     x_coords = [horizontal_lines(i,1), horizontal_lines(i,3)];
+%     y_coords = [horizontal_lines(i,2), horizontal_lines(i,4)];
+%     plot(x_coords, y_coords, 'r-', 'LineWidth', 2);
+% end
+% 
+% % Plot delle linee verticali (in blu)
+% numVertLines = size(vertical_lines, 1);
+% for i = 1:numVertLines
+%     x_coords = [vertical_lines(i,1), vertical_lines(i,3)];
+%     y_coords = [vertical_lines(i,2), vertical_lines(i,4)];
+%     plot(x_coords, y_coords, 'b-', 'LineWidth', 2);
+% end
+% 
+% 
+% title('Linee Grid e Punti di Intersezione');
+% 
+% hold off;
 
 
 % Optimize the size
@@ -575,7 +634,6 @@ intersectionPoints = intersectionPoints(isValid, :);
 
 
 % Definisci la soglia per il filtering dei punti troppo vicini ai grid corner
-cornerThreshold = 10;  % modificare in base alle tue esigenze
 
 % Inizializza un vettore logico per marcare i punti da mantenere (inizialmente tutti sono validi)
 numIntersectionPoints = size(intersectionPoints, 1);
@@ -590,26 +648,19 @@ for iCorner = 1:numCorners
     distances = sqrt(sum((intersectionPoints - cornerPoint).^2, 2));
     
     % Marca come false (cioè da scartare) tutti i punti che sono troppo vicini al grid corner
-    keepPoint(distances <= cornerThreshold) = false;
+    keepPoint(distances <= threshold) = false;
 end
 
 % Filtra la matrice intersectionPoints eliminando i punti troppo vicini ai grid corner
 intersectionPoints = intersectionPoints(keepPoint, :);
 
 
+% DEGUB
+figure, imshow(grayImg), hold on;
 
+plot(intersectionPoints(:,1), intersectionPoints(:,2), 'ro', 'MarkerSize', 3, 'LineWidth', 1);
 
-
-
-
-
-
-
-
-% Visualizza i punti di intersezione sul grafico
-figure, imshow(grayImg), hold on
-plot(intersectionPoints(:,1), intersectionPoints(:,2), 'ro', 'MarkerSize', 10, 'LineWidth', 2);
-title('Intersezioni tra grid_points e filteredLines');
+title('Grid intersection points');
 
 
 for i = 1:length(grid_corner_lines)
@@ -623,5 +674,5 @@ for i = 1:length(grid_corner_lines)
     plot(x_pt2, y_pt2, 'bs', 'MarkerSize', 10, 'LineWidth', 2);
 end
 
-title('Intersezioni e estremi della griglia');
+
 
