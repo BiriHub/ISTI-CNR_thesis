@@ -394,6 +394,8 @@ end
 
 
 %% Dynamic and improved solution to find grid internal intersections
+% given the lines detected by the Hough transformation, after checked the
+% validity,it aims to identify the
 
 
 
@@ -411,7 +413,7 @@ edgeMap= bwmorph(edgeMap,'skeleton');
 % Compute the Hough Transform
 [H, theta, rho] = hough(edgeMap);
 
-peaks = houghpeaks(H, 30, 'threshold', ceil(0.01 * max(H(:))));
+peaks = houghpeaks(H, 31, 'threshold', ceil(0.01 * max(H(:))));
 % Extract the detected lines based on the found peaks
 lines = houghlines(edgeMap, theta, rho, peaks, 'FillGap', 150, 'MinLength', 150);
 
@@ -425,9 +427,11 @@ num_vert_lines  = 15;
 filteredLines = [];
 angleThreshold = 1; % angle threshold
 
-horizontal_lines= zeros(num_horiz_lines,4);
+horizontal_lines= zeros(num_horiz_lines,4); 
 vertical_lines= zeros(num_vert_lines,4);
 
+h=1;
+v=1;
 for i = 1:length(lines)
     currentTheta = lines(i).theta;
     
@@ -438,33 +442,48 @@ for i = 1:length(lines)
     % Verify if the line tends to be vertical
     isVertical = abs(mod(currentTheta, 180) - 90) <= angleThreshold;
         
-
     % Save only the horizontal or vertical lines
-    if isHorizontal 
-        horizontal_lines(i,:)=[lines(i).point1,lines(i).point2];
+    if isHorizontal
+        horizontal_lines(h,:)=[lines(i).point1,lines(i).point2];
         filteredLines = [filteredLines; lines(i)];
+        h=h+1;
     elseif isVertical
-        vertical_lines(i,:) = [lines(i).point1,lines(i).point2];
+        vertical_lines(v,:) = [lines(i).point1,lines(i).point2];
         filteredLines = [filteredLines; lines(i)];
+        v=v+1;
     end
 
 
 end
 
+% Remove empty rows in the structures
 
-% % DEBUG
-% figure;
-% imshow(img);
-% hold on;
-% for k = 1:length(filteredLines)
-% xy = [filteredLines(k).point1; filteredLines(k).point2];
-% plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', 'green');
-% % Display the starting and ending points of the lines
-% plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
-% plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
-% end
-% title('Filteresd Lines detected with the Hough Transform');
-% hold off;
+firstEmptyRowIdx= find(all(horizontal_lines == 0, 2), 1);
+if not(isempty(firstEmptyRowIdx))
+    horizontal_lines = horizontal_lines(1:firstEmptyRowIdx-1,:);
+end
+
+firstEmptyRowIdx= find(all(vertical_lines == 0, 2), 1);
+% If there is a empty line
+if not(isempty(firstEmptyRowIdx))
+    vertical_lines = vertical_lines(1:firstEmptyRowIdx-1,:);
+end
+
+
+
+% DEBUG
+figure;
+imshow(img);
+hold on;
+for k = 1:length(filteredLines)
+xy = [filteredLines(k).point1; filteredLines(k).point2];
+plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', 'green');
+% Display the starting and ending points of the lines
+plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
+plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
+end
+title('Filteresd Lines detected with the Hough Transform');
+hold off;
 
 
 
@@ -483,12 +502,8 @@ grid_corner_lines(4) = struct('point1', refined_grid_points(2,:), 'point2', refi
 % Inizializza una variabile per raccogliere tutti i punti di intersezione
 intersectionPoints = zeros(num_vert_lines * num_horiz_lines, 2);
 
-% Esempio: calcola l'intersezione tra i segmenti di grid_points e quelli di filteredLines
-% Supponendo che filteredLines sia un array di strutture con i campi 'point1' e 'point2'
-% Qui mostriamo come computare l'intersezione per ciascuna coppia (un loop doppio potrebbe essere necessario)
 
-
-% Search for intersection between grid corner lines and vertical lines
+% Search for intersection between grid corner lines and horizontal/vertical lines
 
 k = 1;  % index to save intersections
 threshold = 10; % used to filter too close points
