@@ -150,7 +150,6 @@ edgeMap= bwmorph(edgeMap,'skeleton');
 % Compute the Hough Transform
 [H, theta, rho] = hough(edgeMap);
 % Identify the peaks in the Hough transform (number and threshold can beadjusted)
-%peaks = houghpeaks(H, 4);
 peaks = houghpeaks(H, 30, 'threshold', ceil(0.01 * max(H(:))));
 % Extract the detected lines based on the found peaks
 hough_internal_lines = houghlines(edgeMap, theta, rho, peaks, 'FillGap', 150, 'MinLength', 150);
@@ -209,13 +208,42 @@ hold off;
 
 
 hough_points = [];
-for i = 1:length(lines)
+for i = 1:length(hough_grid_lines)
     hough_points = [hough_points; 
-                   lines(i).point1;
-                   lines(i).point2];
+                   hough_grid_lines(i).point1;
+                   hough_grid_lines(i).point2];
 end
 
-% 1. Filter points in the OCR area
+% 1. Filter points in the OCR area 
+[img_max_height,img_max_width]= size(grayImg);
+
+
+% Frequencies axis
+
+% Width of the upper OCR area
+upper_area_width = abs(grid_points(1,1) - img_max_width);
+
+% Height of the upper OCR area
+upper_area_height = grid_points(1,2) - 1;
+
+
+% Perform OCR
+ocr_frequency_results = ocr(img, [grid_points(1,1), 1, upper_area_width, upper_area_height], ...
+    'LayoutAnalysis', 'Block', 'CharacterSet', "0124568k");
+
+% Decibel axis
+
+% Width of the left OCR area
+left_area_width = grid_points(1,1) - 1;
+
+% Height of the left OCR area
+left_area_height = abs(grid_points(1,2) - img_max_height);
+
+% Perform OCR
+ocr_decibel_results = ocr(img, [1,grid_points(1,2), left_area_width, left_area_height], ...
+    'LayoutAnalysis', 'Block', 'CharacterSet', "01234546789-");
+
+
 
 % Get the left-lower corner of the first frequency number (125)
 % [x , y+height]
@@ -256,8 +284,6 @@ for i = 1:size(hough_points, 1)
 end
 
 
-
-
 % Find the closest point to grid corners
 
 %Threshold
@@ -294,12 +320,14 @@ for i = 1:4
     % approximation of the image grid
     if(distance1>max_point_distance )
         refined_grid_points(i,:) = grid_points(i,:);
+        % refined_grid_points(i,:) = points(ind2,:); %miglioramento
     continue;
 
     % Digital point is too far from the grid, so hough point is the best
     % approximation of the image grid
     elseif(distance2>max_point_distance)
-        refined_grid_points(i,:) = valid_points(idx, :);
+        refined_grid_points(i,:) = noOcr_valid_points(idx, :);
+        % refined_grid_points(i,:) = points(ind1,:);
     continue;
 
     end
@@ -309,42 +337,44 @@ for i = 1:4
 
     % Extract the hough detected point given it iz
     if(distance1==distance2)
-        refined_grid_points(i,:) = valid_points(idx, :);
+        refined_grid_points(i,:) = noOcr_valid_points(idx, :);
         continue;
     end
 
     % Extract the minor distance
     switch(min(distance1,distance2))
         case distance1
-            refined_grid_points(i,:) = valid_points(idx, :);
+            refined_grid_points(i,:) = noOcr_valid_points(idx, :);
+            % refined_grid_points(i,:) = points(ind1,:);
         case distance2
             refined_grid_points(i,:) = grid_points(i,:);
+            % refined_grid_points(i,:) = points(ind2,:);
     end
 
 end
 
 
 %% 
-% % DEBUG
-% figure;
-% imshow(bin_img);
-% hold on;
-% 
-% % % Plot digital grid corner points
-% plot(grid_points(:,1), grid_points(:,2), 'mo', 'MarkerSize', 8, 'LineWidth', 2);
-% 
-% % Plot refined points 
-% plot(refined_grid_points(:,1), refined_grid_points(:,2), 'rx', 'MarkerSize', 8, 'LineWidth', 2);
-% 
-% plot(points(ind1,1), points(ind1,2), 'bx', 'MarkerSize', 8, 'LineWidth', 2);
-% plot(points(ind2,1), points(ind2,2), 'bx', 'MarkerSize', 8, 'LineWidth', 2);
-% 
-% plot(points(:,1), points(:,2), 'gx', 'MarkerSize', 1, 'LineWidth', 2);
-% 
-% 
-% 
-% % legend('Digital Grid corners', 'Punti raffinati');
-% title('Adjusted grid corners');
+% DEBUG
+figure;
+imshow(bin_img);
+hold on;
+
+% % Plot digital grid corner points
+plot(grid_points(:,1), grid_points(:,2), 'mo', 'MarkerSize', 8, 'LineWidth', 2);
+
+% Plot refined points 
+plot(refined_grid_points(:,1), refined_grid_points(:,2), 'rx', 'MarkerSize', 8, 'LineWidth', 2);
+
+plot(points(ind1,1), points(ind1,2), 'mx', 'MarkerSize', 8, 'LineWidth', 2);
+plot(points(ind2,1), points(ind2,2), 'bx', 'MarkerSize', 8, 'LineWidth', 2);
+
+plot(points(:,1), points(:,2), 'gx', 'MarkerSize', 1, 'LineWidth', 2);
+
+
+
+% legend('Digital Grid corners', 'Punti raffinati');
+title('Adjusted grid corners');
 
 
 %% Dynamic and improved solution to find grid internal intersections
