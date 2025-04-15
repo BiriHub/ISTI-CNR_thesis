@@ -1,6 +1,6 @@
 %% 1. Image pre-processing script in MATLAB
 
-% clc; clear; close all;
+clc; clear; close all;
 
 % Load image
 img = imread('Noah_01_02_01.jpg');
@@ -129,77 +129,6 @@ hold off;
 % Containts the digital approximation of grid corners
 grid_points= [top_left(1) top_left(2);top_right(1) top_right(2);
               bottom_left(1) bottom_left(2); bottom_right(1) bottom_right(2)];
-
-
-
-%% 3. Extraction of grid intersections only with Hough transformation
-% Idea: Now, the goal is to extract 
-
-
-% Apply the Canny operator to obtain the binary edge map
-bin_img = edge(grayImg, 'Canny');
-
-edgeMap = imdilate(bin_img, strel('line',3,0)) | imdilate(bin_img,strel('line',3,90));
-
-
-edgeMap = imdilate(edgeMap, strel("square", 3));
-
-edgeMap= bwmorph(edgeMap,'skeleton');
-
-
-% Compute the Hough Transform
-[H, theta, rho] = hough(edgeMap);
-% Identify the peaks in the Hough transform (number and threshold can beadjusted)
-peaks = houghpeaks(H, 30, 'threshold', ceil(0.01 * max(H(:))));
-% Extract the detected lines based on the found peaks
-hough_internal_lines = houghlines(edgeMap, theta, rho, peaks, 'FillGap', 150, 'MinLength', 150);
-
-
-% Filtra le linee non orizzontali e verticali secondo un certo limite
-filteredLines = [];
-angleThreshold = 1; % soglia in gradi (puoi regolarla)
-
-for k = 1:length(hough_internal_lines)
-    % Ottieni l'angolo theta per questa linea
-    currentTheta = hough_internal_lines(k).theta;
-    
-    % Verifica se la linea è quasi orizzontale (vicino a 0° o 180°)
-    isHorizontal = abs(mod(currentTheta, 180)) <= angleThreshold || ...
-                  abs(mod(currentTheta, 180) - 180) <= angleThreshold;
-    
-    % Verifica se la linea è quasi verticale (vicino a 90°)
-    isVertical = abs(mod(currentTheta, 180) - 90) <= angleThreshold;
-    
-    % Conserva solo le linee orizzontali o verticali
-    if isHorizontal || isVertical
-        filteredLines = [filteredLines; hough_internal_lines(k)];
-    end
-end
-
-
-% DEBUG %
-figure;
-imshow(img);
-hold on;
-for k = 1:length(hough_grid_lines)
-xy = [hough_grid_lines(k).point1; hough_grid_lines(k).point2];
-plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', 'blue');
-% Display the starting and ending points of the lines
-plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
-plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
-end
-hold on;
-for k = 1:length(filteredLines)
-xy = [filteredLines(k).point1; filteredLines(k).point2];
-plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', 'green');
-% Display the starting and ending points of the lines
-plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
-plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
-end
-title('ALL Lines detected by the Hough Transform');
-hold off;
-
-
 
 
 %% Estimation of Grid corners
@@ -353,28 +282,32 @@ for i = 1:4
 
 end
 
+% % DEBUG
+% figure;
+% imshow(bin_img);
+% hold on;
+% 
+% % % Plot digital grid corner points
+% plot(grid_points(:,1), grid_points(:,2), 'mo', 'MarkerSize', 8, 'LineWidth', 2);
+% 
+% % Plot refined points 
+% plot(refined_grid_points(:,1), refined_grid_points(:,2), 'rx', 'MarkerSize', 8, 'LineWidth', 2);
+% 
+% plot(points(ind1,1), points(ind1,2), 'mx', 'MarkerSize', 8, 'LineWidth', 2);
+% plot(points(ind2,1), points(ind2,2), 'bx', 'MarkerSize', 8, 'LineWidth', 2);
+% 
+% plot(points(:,1), points(:,2), 'gx', 'MarkerSize', 1, 'LineWidth', 2);
+% title('Adjusted grid corners');
 
-%% 
-% DEBUG
-figure;
-imshow(bin_img);
-hold on;
+% initialize the adjusted grid corner segment variables
+grid_corner_lines = struct('point1', {}, 'point2', {});
 
-% % Plot digital grid corner points
-plot(grid_points(:,1), grid_points(:,2), 'mo', 'MarkerSize', 8, 'LineWidth', 2);
-
-% Plot refined points 
-plot(refined_grid_points(:,1), refined_grid_points(:,2), 'rx', 'MarkerSize', 8, 'LineWidth', 2);
-
-plot(points(ind1,1), points(ind1,2), 'mx', 'MarkerSize', 8, 'LineWidth', 2);
-plot(points(ind2,1), points(ind2,2), 'bx', 'MarkerSize', 8, 'LineWidth', 2);
-
-plot(points(:,1), points(:,2), 'gx', 'MarkerSize', 1, 'LineWidth', 2);
+grid_corner_lines(1) = struct('point1', refined_grid_points(1,:), 'point2', refined_grid_points(2,:)); % upper horizontal line
+grid_corner_lines(2) = struct('point1', refined_grid_points(1,:), 'point2', refined_grid_points(3,:)); % left vertical line
+grid_corner_lines(3) = struct('point1', refined_grid_points(3,:), 'point2', refined_grid_points(4,:)); % lower horizontal line
+grid_corner_lines(4) = struct('point1', refined_grid_points(2,:), 'point2', refined_grid_points(4,:)); % right vertical line
 
 
-
-% legend('Digital Grid corners', 'Punti raffinati');
-title('Adjusted grid corners');
 
 
 %% Dynamic and improved solution to find grid internal intersections
@@ -405,40 +338,42 @@ lines = houghlines(edgeMap, theta, rho, peaks, 'FillGap', 150, 'MinLength', 150)
 % Filter all lines that are not neither horizontal nor vertical according
 % to a threshold
 
-num_horiz_lines = 16;
-num_vert_lines  = 15;
+max_num_horiz_lines = 16;
+max_num_vert_lines  = 15;
 
 filteredLines = [];
 angleThreshold = 1; % angle threshold
 
-horizontal_lines= zeros(num_horiz_lines,4); 
-vertical_lines= zeros(num_vert_lines,4);
+horizontal_lines= zeros(max_num_horiz_lines,4); 
+vertical_lines= zeros(max_num_vert_lines,4);
 
 h=1;
 v=1;
 for i = 1:length(lines)
     currentTheta = lines(i).theta;
     
-    % Verify if the line tends to be horizontal
-    isHorizontal = abs(mod(currentTheta, 180)) <= angleThreshold || ...
-                  abs(mod(currentTheta, 180) - 180) <= angleThreshold;
-    
     % Verify if the line tends to be vertical
-    isVertical = abs(mod(currentTheta, 180) - 90) <= angleThreshold;
+    isVertical = abs(mod(currentTheta, 180)) <= angleThreshold || ...
+                  abs(mod(currentTheta, 180) - 180) <= angleThreshold;
+    %TODO: aggiungi il sistema per escludere le linee che hanno una
+    %intersezione con gli assi della griglia
+    % Verify if the line tends to be horizontal
+    isHorizontal = abs(mod(currentTheta, 180) - 90) <= angleThreshold;
         
+    tmp= [lines(i).point1,lines(i).point2];
     % Save only the horizontal or vertical lines
-    if isHorizontal
-        horizontal_lines(h,:)=[lines(i).point1,lines(i).point2];
+    if isHorizontal && ~checkIntersection(tmp,grid_corner_lines(1),grid_corner_lines(3))
+        horizontal_lines(h,:)=tmp;
         filteredLines = [filteredLines; lines(i)];
         h=h+1;
-    elseif isVertical
-        vertical_lines(v,:) = [lines(i).point1,lines(i).point2];
+    elseif isVertical && ~checkIntersection(tmp,grid_corner_lines(2),grid_corner_lines(4))
+        vertical_lines(v,:) = tmp;
         filteredLines = [filteredLines; lines(i)];
         v=v+1;
     end
-
-
 end
+
+
 
 % Remove empty rows in the structures
 
@@ -521,12 +456,7 @@ for i = 1:length(grid_corner_lines)
     end
 end
 
-k
 % Identify internal intersections between horizontal and vertical lines
-
-
-% k = 1;  % index to save intersection
-% % internal_intersect_grid=[];
 
 
 % Idea: for each horizontal line I look for the intersection points between
@@ -584,60 +514,58 @@ end
 
 % Optimize the size
 intersectionPoints = intersectionPoints(1:k-1, :);
-
-% Supponiamo che intersectionPoints sia la matrice ottenuta con tutte le intersezioni
-% e threshold sia la soglia per la distanza
-numPoints = size(intersectionPoints, 1);
-isValid = true(numPoints, 1);  % Vettore logico: true se il punto va tenuto
-
-% Ad esempio, confronta ogni punto con i suoi vicini
-for i = 1:numPoints
-    if ~isValid(i)
-        continue; % Se il punto i è già stato contrassegnato come non valido, salta
-    end
-    
-    % Trova i 2 nearest neighbor (il primo sarà il punto stesso)
-    idx = knnsearch(intersectionPoints, intersectionPoints(i,:), 'K', 2);
-    
-    % Se il secondo punto (indice 2) risulta troppo vicino, marca quel punto come non valido
-    if numel(idx) > 1
-        neighborIdx = idx(2);
-        % Calcola la distanza
-        dist = norm(intersectionPoints(i,:) - intersectionPoints(neighborIdx,:));
-        % remove the point
-        if dist <= threshold
-            isValid(neighborIdx) = false;
-        end
-    end
-end
-
-% Ricostruisci la matrice senza i "buchi"
-intersectionPoints = intersectionPoints(isValid, :);
-
-
-
-
-% Definisci la soglia per il filtering dei punti troppo vicini ai grid corner
-
-% Inizializza un vettore logico per marcare i punti da mantenere (inizialmente tutti sono validi)
-numIntersectionPoints = size(intersectionPoints, 1);
-keepPoint = true(numIntersectionPoints, 1);
-
-numCorners = size(refined_grid_points, 1);
-for iCorner = 1:numCorners
-    % Estrai il punto corner corrente
-    cornerPoint = refined_grid_points(iCorner, :);
-    
-    % Calcola le distanze (in maniera vettorializzata) da cornerPoint a tutti i punti di intersectionPoints
-    distances = sqrt(sum((intersectionPoints - cornerPoint).^2, 2));
-    
-    % Marca come false (cioè da scartare) tutti i punti che sono troppo vicini al grid corner
-    keepPoint(distances <= threshold) = false;
-end
-
-% Filtra la matrice intersectionPoints eliminando i punti troppo vicini ai grid corner
-intersectionPoints = intersectionPoints(keepPoint, :);
-
+% 
+% % Supponiamo che intersectionPoints sia la matrice ottenuta con tutte le intersezioni
+% % e threshold sia la soglia per la distanza
+% numPoints = size(intersectionPoints, 1);
+% isValid = true(numPoints, 1);  % Vettore logico: true se il punto va tenuto
+% 
+% % Ad esempio, confronta ogni punto con i suoi vicini
+% for i = 1:numPoints
+%     if ~isValid(i)
+%         continue; % Se il punto i è già stato contrassegnato come non valido, salta
+%     end
+% 
+%     % Trova i 2 nearest neighbor (il primo sarà il punto stesso)
+%     idx = knnsearch(intersectionPoints, intersectionPoints(i,:), 'K', 2);
+% 
+%     % Se il secondo punto (indice 2) risulta troppo vicino, marca quel punto come non valido
+%     if numel(idx) > 1
+%         neighborIdx = idx(2);
+%         % Calcola la distanza
+%         dist = norm(intersectionPoints(i,:) - intersectionPoints(neighborIdx,:));
+%         % remove the point
+%         if dist <= threshold
+%             isValid(neighborIdx) = false;
+%         end
+%     end
+% end
+% 
+% % Ricostruisci la matrice senza i "buchi"
+% intersectionPoints = intersectionPoints(isValid, :);
+% 
+% 
+% % Definisci la soglia per il filtering dei punti troppo vicini ai grid corner
+% 
+% % Inizializza un vettore logico per marcare i punti da mantenere (inizialmente tutti sono validi)
+% numIntersectionPoints = size(intersectionPoints, 1);
+% keepPoint = true(numIntersectionPoints, 1);
+% 
+% numCorners = size(refined_grid_points, 1);
+% for iCorner = 1:numCorners
+%     % Estrai il punto corner corrente
+%     cornerPoint = refined_grid_points(iCorner, :);
+% 
+%     % Calcola le distanze (in maniera vettorializzata) da cornerPoint a tutti i punti di intersectionPoints
+%     distances = sqrt(sum((intersectionPoints - cornerPoint).^2, 2));
+% 
+%     % Marca come false (cioè da scartare) tutti i punti che sono troppo vicini al grid corner
+%     keepPoint(distances <= threshold) = false;
+% end
+% 
+% % Filtra la matrice intersectionPoints eliminando i punti troppo vicini ai grid corner
+% intersectionPoints = intersectionPoints(keepPoint, :);
+% 
 
 % DEGUB
 figure, imshow(grayImg), hold on;
