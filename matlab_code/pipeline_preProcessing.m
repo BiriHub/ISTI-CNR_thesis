@@ -1,19 +1,21 @@
-%% Image pre-processing script in MATLAB
+%% 1. Image pre-processing script in MATLAB
 
-clc; clear; close all;
+% clc; clear; close all;
 
 % Load image
-img = imread('Noah_01_01_01.jpg');
+img = imread('Noah_01_02_01.jpg');
 grayImg = rgb2gray(img);
 grayImg = medfilt2(grayImg); % median filter to reduce errors (3 by 3)
+
+
+%% 2. Preparing the image before applying th Hough transformation to identify an APPROXIMATION of grid corners
+% Idea: It aims to identify a possible approximation of where the grid corners are in the image, in next steps there will be found the exact points 
 
 % Edge-detection with Canny's algorithm + Morphologycal operations
 
 % Apply the Canny operator to obtain the binary edge map
 bin_img = edge(grayImg, 'Canny');
 
-% Preparing the image before applying th Hough transformation to identify
-% an approxymation of grid corners
 
 % Dilation
 edgeMap = imdilate(bin_img, strel('line',3,0)) | imdilate(bin_img, strel('line',3,90));
@@ -34,24 +36,24 @@ edgeMap = imdilate(edgeMap, strel("square", 3));
 peaks = houghpeaks(H, 4);
 
 % Extract the detected lines based on the found peaks
-lines = houghlines(edgeMap, theta, rho, peaks, 'FillGap', 40,'MinLength',150);
+hough_grid_lines = houghlines(edgeMap, theta, rho, peaks, 'FillGap', 40,'MinLength',150);
 
 % DEBUG
-% figure;
-% imshow(img);
-% hold on;
-% for k = 1:length(lines)
-%     xy = [lines(k).point1; lines(k).point2];
-%     plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', 'green');
-%     % Display the starting and ending points of the lines
-%     plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
-%     plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
-% end
-% 
-% title('Lines detected with the Hough Transform');
-% hold off;
+figure;
+imshow(img);
+hold on;
+for k = 1:length(hough_grid_lines)
+    xy = [hough_grid_lines(k).point1; hough_grid_lines(k).point2];
+    plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', 'green');
+    % Display the starting and ending points of the lines
+    plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
+    plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
+end
 
-%% Identify intersection points between detected segments
+title('Lines detected with the Hough Transform');
+hold off;
+
+%% 2.2 Identify digital intersection points between detected segments
 
 num_lines = 4;
 
@@ -62,16 +64,16 @@ point_intersec_y = [];
 
 for i = 1:num_lines
     % First line
-    line1_p1 = lines(i).point1;
-    line1_p2 = lines(i).point2;
+    line1_p1 = hough_grid_lines(i).point1;
+    line1_p2 = hough_grid_lines(i).point2;
 
     % Check all intersections between line1 and the other lines
     for j = i+1:num_lines
 
         if j ~= i 
             % Second line
-            line2_p1 = lines(j).point1;
-            line2_p2 = lines(j).point2;
+            line2_p1 = hough_grid_lines(j).point1;
+            line2_p2 = hough_grid_lines(j).point2;
     
             [intersec_X, intersec_Y] = intersectLines(line1_p1(1), line1_p1(2), line1_p2(1), line1_p2(2), line2_p1(1), line2_p1(2), line2_p2(1), line2_p2(2));
     
@@ -124,62 +126,14 @@ plot(bottom_right(1), bottom_right(2), 'mo', 'MarkerSize', 10, 'LineWidth', 2);
 legend('Top Left', 'Top Right', 'Bottom Left', 'Bottom Right');
 hold off;
 
+% Containts the digital approximation of grid corners
 grid_points= [top_left(1) top_left(2);top_right(1) top_right(2);
               bottom_left(1) bottom_left(2); bottom_right(1) bottom_right(2)];
 
 
-%% OCR
-[img_max_height,img_max_width]= size(grayImg);
 
-
-% Frequencies axis
-
-% Width of the upper OCR area
-upper_area_width = abs(grid_points(1,1) - img_max_width);
-
-% Height of the upper OCR area
-upper_area_height = grid_points(1,2) - 1;
-
-
-% Perform OCR
-ocr_frequency_results = ocr(img, [grid_points(1,1), 1, upper_area_width, upper_area_height], ...
-    'LayoutAnalysis', 'Block', 'CharacterSet', "0124568k");
-
-
-
-% Decibel axis
-
-% Width of the left OCR area
-left_area_width = grid_points(1,1) - 1;
-
-% Height of the left OCR area
-left_area_height = abs(grid_points(1,2) - img_max_height);
-
-% Perform OCR
-ocr_decibel_results = ocr(img, [1,grid_points(1,2), left_area_width, left_area_height], ...
-    'LayoutAnalysis', 'Block', 'CharacterSet', "01234546789-");
-
-
-%% Extraction of grid intersections only with Hough transformation
-
-
-bin_img = edge(grayImg, 'Canny');
-% Dilation
-edgeMap = imdilate(bin_img, strel('line',3,0)) | imdilate(bin_img, strel('line',3,90));
-
-edgeMap = imfill(edgeMap, 4, 'holes');
-
-% Extract the perimeter of the grid
-edgeMap = bwmorph(edgeMap, 'remove');
-
-% Increase line size preparing for Hough transformation
-edgeMap = imdilate(edgeMap, strel("square", 3));
-
-
-% Apply Hough transformation to identify the grid axis
-[H, theta, rho] = hough(edgeMap);
-peaks = houghpeaks(H, 4, 'threshold', ceil(0.01 * max(H(:))));
-hough_grid_lines = houghlines(edgeMap, theta, rho, peaks, 'FillGap', 150, 'MinLength',150); 
+%% 3. Extraction of grid intersections only with Hough transformation
+% Idea: Now, the goal is to extract 
 
 
 % Apply the Canny operator to obtain the binary edge map
@@ -285,7 +239,7 @@ right_upper_boundingBox_first_dec = [ocr_decibel_results.WordBoundingBoxes(1,1)+
 right_lower_boundingBox_last_dec = [ocr_decibel_results.WordBoundingBoxes(end,1)+ocr_decibel_results.WordBoundingBoxes(end,3), ocr_decibel_results.WordBoundingBoxes(end,2)+ocr_decibel_results.WordBoundingBoxes(end,4)];
 
 
-valid_points = [];
+noOcr_valid_points = [];
 for i = 1:size(hough_points, 1)
     point = hough_points(i, :);
     
@@ -297,7 +251,7 @@ for i = 1:size(hough_points, 1)
     
     % Check if the point is valid
     if ~in_upper_ocr && ~in_left_ocr
-        valid_points = [valid_points; point];
+        noOcr_valid_points = [noOcr_valid_points; point];
     end
 end
 
@@ -317,11 +271,11 @@ refined_grid_points = zeros(4, 2);
 for i = 1:4
     
     % Extract the closest point
-    idx = knnsearch(valid_points, grid_points(i,:));
+    idx = knnsearch(noOcr_valid_points, grid_points(i,:));
 
     % If the valid closest hough point is too far from the estimated digital grid
     % point
-    if(norm(valid_points(idx, :) - grid_points(i,:))>max_point_distance)
+    if(norm(noOcr_valid_points(idx, :) - grid_points(i,:))>max_point_distance)
         refined_grid_points(i,:) = grid_points(i,:);
         continue;
     end
@@ -330,7 +284,7 @@ for i = 1:4
 
     % First point : extract the distance between the valid point and the closest
     % pixel of the grid corner
-    [ind1 , distance1]= knnsearch(points, valid_points(idx, :));
+    [ind1 , distance1]= knnsearch(points, noOcr_valid_points(idx, :));
 
     % Second point : extract the distance between the digital point and the closest
     % pixel of the grid corner
