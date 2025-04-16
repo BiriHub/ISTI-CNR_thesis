@@ -38,20 +38,20 @@ peaks = houghpeaks(H, 4);
 % Extract the detected lines based on the found peaks
 hough_grid_lines = houghlines(edgeMap, theta, rho, peaks, 'FillGap', 40,'MinLength',150);
 
-% DEBUG
-figure;
-imshow(img);
-hold on;
-for k = 1:length(hough_grid_lines)
-    xy = [hough_grid_lines(k).point1; hough_grid_lines(k).point2];
-    plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', 'green');
-    % Display the starting and ending points of the lines
-    plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
-    plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
-end
-
-title('Lines detected with the Hough Transform');
-hold off;
+% % DEBUG
+% figure;
+% imshow(img);
+% hold on;
+% for k = 1:length(hough_grid_lines)
+%     xy = [hough_grid_lines(k).point1; hough_grid_lines(k).point2];
+%     plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', 'green');
+%     % Display the starting and ending points of the lines
+%     plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
+%     plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
+% end
+% 
+% title('Lines detected with the Hough Transform');
+% hold off;
 
 %% 2.2 Identify digital intersection points between detected segments
 
@@ -310,8 +310,7 @@ for i = 1:length(lines)
     % Verify if the line tends to be vertical
     isVertical = abs(mod(currentTheta, 180)) <= angleThreshold || ...
                   abs(mod(currentTheta, 180) - 180) <= angleThreshold;
-    %TODO: aggiungi il sistema per escludere le linee che hanno una
-    %intersezione con gli assi della griglia
+
     % Verify if the line tends to be horizontal
     isHorizontal = abs(mod(currentTheta, 180) - 90) <= angleThreshold;
         
@@ -345,42 +344,32 @@ end
 
 
 
-% DEBUG
-figure;
-imshow(img);
-hold on;
-for k = 1:length(filteredLines)
-xy = [filteredLines(k).point1; filteredLines(k).point2];
-plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', 'green');
-% Display the starting and ending points of the lines
-plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
-plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
-end
-title('Filteresd Lines detected with the Hough Transform');
-hold off;
+% % DEBUG
+% figure;
+% imshow(img);
+% hold on;
+% for k = 1:length(filteredLines)
+% xy = [filteredLines(k).point1; filteredLines(k).point2];
+% plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', 'green');
+% % Display the starting and ending points of the lines
+% plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
+% plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
+% end
+% title('Filtered Lines detected with the Hough Transform');
+% hold off;
 
 
 
 %% Look for the intersection between grid corner lines
 
 
-% initialize
-grid_corner_lines = struct('point1', {}, 'point2', {});
-
-grid_corner_lines(1) = struct('point1', refined_grid_points(1,:), 'point2', refined_grid_points(2,:)); % upper horizontal line
-grid_corner_lines(2) = struct('point1', refined_grid_points(1,:), 'point2', refined_grid_points(3,:)); % left vertical line
-grid_corner_lines(3) = struct('point1', refined_grid_points(3,:), 'point2', refined_grid_points(4,:)); % lower horizontal line
-grid_corner_lines(4) = struct('point1', refined_grid_points(2,:), 'point2', refined_grid_points(4,:)); % right vertical line
-
-
 % Inizializza una variabile per raccogliere tutti i punti di intersezione
-intersectionPoints = zeros(num_vert_lines * num_horiz_lines, 2);
+intersectionPoints = zeros(max_num_vert_lines * max_num_horiz_lines, 2);
 
 
 % Search for intersection between grid corner lines and horizontal/vertical lines
 
 k = 1;  % index to save intersections
-threshold = 10; % used to filter too close points
 for i = 1:length(grid_corner_lines)
 
     x1 = grid_corner_lines(i).point1(1);
@@ -469,58 +458,6 @@ end
 
 % Optimize the size
 intersectionPoints = intersectionPoints(1:k-1, :);
-% 
-% % Supponiamo che intersectionPoints sia la matrice ottenuta con tutte le intersezioni
-% % e threshold sia la soglia per la distanza
-% numPoints = size(intersectionPoints, 1);
-% isValid = true(numPoints, 1);  % Vettore logico: true se il punto va tenuto
-% 
-% % Ad esempio, confronta ogni punto con i suoi vicini
-% for i = 1:numPoints
-%     if ~isValid(i)
-%         continue; % Se il punto i è già stato contrassegnato come non valido, salta
-%     end
-% 
-%     % Trova i 2 nearest neighbor (il primo sarà il punto stesso)
-%     idx = knnsearch(intersectionPoints, intersectionPoints(i,:), 'K', 2);
-% 
-%     % Se il secondo punto (indice 2) risulta troppo vicino, marca quel punto come non valido
-%     if numel(idx) > 1
-%         neighborIdx = idx(2);
-%         % Calcola la distanza
-%         dist = norm(intersectionPoints(i,:) - intersectionPoints(neighborIdx,:));
-%         % remove the point
-%         if dist <= threshold
-%             isValid(neighborIdx) = false;
-%         end
-%     end
-% end
-% 
-% % Ricostruisci la matrice senza i "buchi"
-% intersectionPoints = intersectionPoints(isValid, :);
-% 
-% 
-% % Definisci la soglia per il filtering dei punti troppo vicini ai grid corner
-% 
-% % Inizializza un vettore logico per marcare i punti da mantenere (inizialmente tutti sono validi)
-% numIntersectionPoints = size(intersectionPoints, 1);
-% keepPoint = true(numIntersectionPoints, 1);
-% 
-% numCorners = size(refined_grid_points, 1);
-% for iCorner = 1:numCorners
-%     % Estrai il punto corner corrente
-%     cornerPoint = refined_grid_points(iCorner, :);
-% 
-%     % Calcola le distanze (in maniera vettorializzata) da cornerPoint a tutti i punti di intersectionPoints
-%     distances = sqrt(sum((intersectionPoints - cornerPoint).^2, 2));
-% 
-%     % Marca come false (cioè da scartare) tutti i punti che sono troppo vicini al grid corner
-%     keepPoint(distances <= threshold) = false;
-% end
-% 
-% % Filtra la matrice intersectionPoints eliminando i punti troppo vicini ai grid corner
-% intersectionPoints = intersectionPoints(keepPoint, :);
-% 
 
 % DEGUB
 figure, imshow(grayImg), hold on;
