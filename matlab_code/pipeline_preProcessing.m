@@ -115,33 +115,21 @@ else
     bottom_right = bottom_points(1,:);
 end
 
-%DEBUG
-figure;
-imshow(img);
-hold on;
-plot(top_left(1), top_left(2), 'bo', 'MarkerSize', 10, 'LineWidth', 2);
-plot(top_right(1), top_right(2), 'go', 'MarkerSize', 10, 'LineWidth', 2);
-plot(bottom_left(1), bottom_left(2), 'co', 'MarkerSize', 10, 'LineWidth', 2);
-plot(bottom_right(1), bottom_right(2), 'mo', 'MarkerSize', 10, 'LineWidth', 2);
-legend('Top Left', 'Top Right', 'Bottom Left', 'Bottom Right');
-hold off;
+% %DEBUG
+% figure;
+% imshow(img);
+% hold on;
+% plot(top_left(1), top_left(2), 'bo', 'MarkerSize', 10, 'LineWidth', 2);
+% plot(top_right(1), top_right(2), 'go', 'MarkerSize', 10, 'LineWidth', 2);
+% plot(bottom_left(1), bottom_left(2), 'co', 'MarkerSize', 10, 'LineWidth', 2);
+% plot(bottom_right(1), bottom_right(2), 'mo', 'MarkerSize', 10, 'LineWidth', 2);
+% legend('Top Left', 'Top Right', 'Bottom Left', 'Bottom Right');
+% hold off;
 
 % Containts the digital approximation of grid corners
 grid_points= [top_left(1) top_left(2);top_right(1) top_right(2);
               bottom_left(1) bottom_left(2); bottom_right(1) bottom_right(2)];
 
-
-%% Estimation of Grid corners
-% calculated on the mean between detected points with Hough and digital
-% intersection points 
-
-
-hough_points = [];
-for i = 1:length(hough_grid_lines)
-    hough_points = [hough_points; 
-                   hough_grid_lines(i).point1;
-                   hough_grid_lines(i).point2];
-end
 
 % 1. Filter points in the OCR area 
 [img_max_height,img_max_width]= size(grayImg);
@@ -176,6 +164,11 @@ ocr_decibel_results = ocr(img, [1,grid_points(1,2), left_area_width, left_area_h
 
 % Get the left-lower corner of the first frequency number (125)
 % [x , y+height]
+
+% if the ocr does not detect the frequency text, then throws an exception
+if ocr_frequency_results.Words(1)~="125"
+    throw(MException('ocrDetection:firstFrequencyNotFound','OCR is not valid: first frequency axis value has not been detected (125Hz)'));
+end
 left_lower_boundingBox_first_freq = [ocr_frequency_results.WordBoundingBoxes(1,1), ocr_frequency_results.WordBoundingBoxes(1,2)+ocr_frequency_results.WordBoundingBoxes(1,4)];
 
 
@@ -183,123 +176,85 @@ left_lower_boundingBox_first_freq = [ocr_frequency_results.WordBoundingBoxes(1,1
 % [x +width, y+height]
 %Note : this is used as a double check to be completely sure that the
 %points are valid
+
+% % if the ocr does not detect the frequency text, then throws an exception
+% if ocr_frequency_results.Words(end)~="16k"
+%     throw(MException('ocrDetection:lastFrequencyNotFound','OCR is not valid: last frequency axis value has not been detected (16kHz)'));
+% end
 right_lower_boundingBox_last_freq = [ocr_frequency_results.WordBoundingBoxes(end,1)+ocr_frequency_results.WordBoundingBoxes(end,3), ocr_frequency_results.WordBoundingBoxes(end,2)+ocr_frequency_results.WordBoundingBoxes(end,4)];
 
 % Get the right-upper corner of the first decibel number (-10)
 % [x+weight , y]
+
+% if the ocr does not detect the decibel text, then throws an exception
+if ocr_decibel_results.Words(1)~="-10"
+    throw(MException('ocrDetection:firstDecibelNotFound','OCR is not valid: first decibel axis value has not been detected (-10db)'));
+end
 right_upper_boundingBox_first_dec = [ocr_decibel_results.WordBoundingBoxes(1,1)+ocr_decibel_results.WordBoundingBoxes(1,3), ocr_decibel_results.WordBoundingBoxes(1,2)];
 
 % Get the right-lower corner of the last decibel number (120)
 % [x +width, y+height]
 %Note : this is used as a double check to be completely sure that the
 %points are valid
+
+% % if the ocr does not detect the decibel text, then throws an exception
+% if ocr_decibel_results.Words(end)~="120"
+%     throw(MException('ocrDetection:lastDecibelNotFound','OCR is not valid: last decibel axis value has not been detected (120db)'));
+% end
 right_lower_boundingBox_last_dec = [ocr_decibel_results.WordBoundingBoxes(end,1)+ocr_decibel_results.WordBoundingBoxes(end,3), ocr_decibel_results.WordBoundingBoxes(end,2)+ocr_decibel_results.WordBoundingBoxes(end,4)];
 
 
-noOcr_valid_points = [];
-for i = 1:size(hough_points, 1)
-    point = hough_points(i, :);
-    
-    % Check if the point is below the frequency text area
-    in_upper_ocr = (point(1) > left_lower_boundingBox_first_freq(1) && point(2) < left_lower_boundingBox_first_freq(2));
-    
-    % Check if the point is on the right of decibel text area
-    in_left_ocr = (point(1) <= right_upper_boundingBox_first_dec(1) && point(2) >= right_upper_boundingBox_first_dec(2));
-    
-    % Check if the point is valid
-    if ~in_upper_ocr && ~in_left_ocr
-        noOcr_valid_points = [noOcr_valid_points; point];
-    end
-end
+%% Find the closest point to digital grid corners
 
 
-% Find the closest point to grid corners
-
-%Threshold
-max_point_distance=5 ; % 5 pixels
+% Extract as much information as possible from the binary image excluding
+% the ocr text area which can lead to ouliers in the grid corner
+% coordinates
+x = min(grid_points(1,1), grid_points(3,1));
+y = min(grid_points(1,2), grid_points(2,2));
+cropped_bin_img = imcrop(bin_img, [x, y, img_max_width, img_max_height]);
 
 % Save the positive pixel in the binary image
-[bin_x, bin_y] = find(bin_img==1); 
-points=[bin_y,bin_x];
+[bin_x, bin_y] = find(cropped_bin_img==1);
+points = [bin_y, bin_x];
 
-refined_grid_points = zeros(4, 2);
+% Transform grid_points to cropped image coordinates for processing
+grid_points_cropped = grid_points - [x, y];
+
+
+% Initialize refined points in cropped coordinates
+refined_grid_points_cropped = zeros(4, 2);
+
 for i = 1:4
+    % Extract the closest point equal to 1 in the binary image near to the
+    % digital grid corner
     
-    % Extract the closest point
-    idx = knnsearch(noOcr_valid_points, grid_points(i,:));
-
-    % If the valid closest hough point is too far from the estimated digital grid
-    % point
-    if(norm(noOcr_valid_points(idx, :) - grid_points(i,:))>max_point_distance)
-        refined_grid_points(i,:) = grid_points(i,:);
-        continue;
-    end
-        
-    % Select best point between valid and digital one
-
-    % First point : extract the distance between the valid point and the closest
-    % pixel of the grid corner
-    [ind1 , distance1]= knnsearch(points, noOcr_valid_points(idx, :));
-
-    % Second point : extract the distance between the digital point and the closest
-    % pixel of the grid corner
-    [ind2, distance2]= knnsearch(points, grid_points(i,:));
-
-    % Hough valid point is too far from the grid, so digital value is the best
-    % approximation of the image grid
-    if(distance1>max_point_distance )
-        refined_grid_points(i,:) = grid_points(i,:);
-        % refined_grid_points(i,:) = points(ind2,:); %miglioramento
-    continue;
-
-    % Digital point is too far from the grid, so hough point is the best
-    % approximation of the image grid
-    elseif(distance2>max_point_distance)
-        refined_grid_points(i,:) = noOcr_valid_points(idx, :);
-        % refined_grid_points(i,:) = points(ind1,:);
-    continue;
-
-    end
-
-    % Whether both points are valid according to the threshold, following
-    % instructions verify which is the best choice to take into account
-
-    % Extract the hough detected point given it iz
-    if(distance1==distance2)
-        refined_grid_points(i,:) = noOcr_valid_points(idx, :);
-        continue;
-    end
-
-    % Extract the minor distance
-    switch(min(distance1,distance2))
-        case distance1
-            refined_grid_points(i,:) = noOcr_valid_points(idx, :);
-            % refined_grid_points(i,:) = points(ind1,:);
-        case distance2
-            refined_grid_points(i,:) = grid_points(i,:);
-            % refined_grid_points(i,:) = points(ind2,:);
-    end
-
+    [ind2, ~] = knnsearch(points, grid_points_cropped(i,:),"Distance","cityblock");
+    refined_grid_points_cropped(i,:) = points(ind2,:);
 end
+
+% Transform refined points back to original coordinates for display/output
+refined_grid_points = refined_grid_points_cropped + [x-1, y-1];
+
 
 % % DEBUG
 % figure;
+% imshow(cropped_bin_img);
+% hold on;
+% plot(refined_grid_points_cropped(:,1), refined_grid_points_cropped(:,2), 'rx', 'MarkerSize', 8, 'LineWidth', 2);
+% hold off;
+% % Display in original image coordinates
+% figure;
 % imshow(bin_img);
 % hold on;
-% 
-% % % Plot digital grid corner points
 % plot(grid_points(:,1), grid_points(:,2), 'mo', 'MarkerSize', 8, 'LineWidth', 2);
-% 
-% % Plot refined points 
 % plot(refined_grid_points(:,1), refined_grid_points(:,2), 'rx', 'MarkerSize', 8, 'LineWidth', 2);
-% 
-% plot(points(ind1,1), points(ind1,2), 'mx', 'MarkerSize', 8, 'LineWidth', 2);
-% plot(points(ind2,1), points(ind2,2), 'bx', 'MarkerSize', 8, 'LineWidth', 2);
-% 
-% plot(points(:,1), points(:,2), 'gx', 'MarkerSize', 1, 'LineWidth', 2);
+% % Transform points back to original coordinates for display
+% points_original = points + [x-1, y-1];
+% plot(points_original(:,1), points_original(:,2), 'gx', 'MarkerSize', 1, 'LineWidth', 2);
 % title('Adjusted grid corners');
 
-% initialize the adjusted grid corner segment variables
+% Initialize the adjusted grid corner segment variables
 grid_corner_lines = struct('point1', {}, 'point2', {});
 
 grid_corner_lines(1) = struct('point1', refined_grid_points(1,:), 'point2', refined_grid_points(2,:)); % upper horizontal line
