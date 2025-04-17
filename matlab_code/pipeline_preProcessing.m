@@ -471,12 +471,72 @@ for i = 1:length(grid_corner_lines)
     % Punto 1 della linea
     x_pt1 = grid_corner_lines(i).point1(1);
     y_pt1 = grid_corner_lines(i).point1(2);
-    plot(x_pt1, y_pt1, 'bs', 'MarkerSize', 10, 'LineWidth', 2);    
+    plot(x_pt1, y_pt1, 'bs', 'MarkerSize', 4, 'LineWidth', 1);    
     % Punto 2 della linea
     x_pt2 = grid_corner_lines(i).point2(1);
     y_pt2 = grid_corner_lines(i).point2(2);
-    plot(x_pt2, y_pt2, 'bs', 'MarkerSize', 10, 'LineWidth', 2);
+    plot(x_pt2, y_pt2, 'bs', 'MarkerSize', 4, 'LineWidth', 1);
 end
+
+%% OCR IMPROVEMENT
+
+%1.  List points over the frequency text area by extracting coordinates 
+% that are above the upper-left grid corner
+
+% Frequency
+idx = find(intersectionPoints(:,2) <= grid_corner_lines(1).point1(2));
+freq_points = sortrows(intersectionPoints(idx,:));
+if size(freq_points,1) ~= 13
+    throw(MException('sizeError:Error','The number of points is not sufficient'));
+end
+
+% Create a vector of indices
+indices = 1:size(freq_points,1);
+
+% Keep points where index is odd OR index is == 2
+keep_indices = mod(indices, 2) ~= 0 | indices == 2;
+
+% Apply the filter to get the filtered freq_points
+freq_points = freq_points(keep_indices, :);
+
+
+% Initialize array to store OCR results
+ocr_results = cell(size(freq_points,1), 1);
+
+
+
+% Process OCR for each point in freq_points
+for i = 1:size(freq_points,1)
+    % Calculate bounding points for OCR area
+    if i == 1
+        % For the first point, use the original approach since there's no previous point
+        a = abs(freq_points(i,1) - 1) / 2;
+    else
+        % For other points, calculate 'a' based on the difference with the previous point
+        a = abs(freq_points(i,1) - freq_points(i-1,1)) / 2;
+    end
+    
+    point1 = [freq_points(i,1) - a, freq_points(i,2)];
+    point2 = [freq_points(i,1) + a, freq_points(i,2)];
+    
+    % Define rectangular area for OCR
+    % [x, y, width, height]
+
+    width_ocr_area=point1(1)+(point2(1) - point1(1));
+    if width_ocr_area>img_max_height
+        width_ocr_area=img_max_width-point1(1)-1;
+    end
+    ocr_area = [point1(1), 1, width_ocr_area, point1(2) - 1];
+    
+    % Perform OCR
+    ocr_results{i} = ocr(img, ocr_area, 'LayoutAnalysis', 'Block', 'CharacterSet', "0124568k");
+
+end
+
+% TODO: Decibel ax
+
+
+
 
 
 
