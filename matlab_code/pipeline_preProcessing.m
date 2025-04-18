@@ -484,36 +484,37 @@ end
 % that are above the upper-left grid corner
 
 % Frequency
-idx = find(intersectionPoints(:,2) <= grid_corner_lines(1).point1(2));
+upper_corner=max(grid_corner_lines(1).point1(2),grid_corner_lines(1).point2(2));
+idx = find(intersectionPoints(:,2) <= upper_corner);
 freq_points = sortrows(intersectionPoints(idx,:));
 if size(freq_points,1) ~= 13
     throw(MException('sizeError:Error','The number of points is not sufficient'));
 end
 
-% Create a vector of indices
-indices = 1:size(freq_points,1);
-
-% Keep points where index is odd OR index is == 2
-keep_indices = mod(indices, 2) ~= 0 | indices == 2;
-
-% Apply the filter to get the filtered freq_points
-freq_points = freq_points(keep_indices, :);
+% % Create a vector of indices
+% indices = 1:size(freq_points,1);
+% 
+% % Keep points where index is odd OR index is == 2
+% keep_indices = mod(indices, 2) ~= 0 | indices == 2;
+% 
+% % Apply the filter to get the filtered freq_points
+% freq_points = freq_points(keep_indices, :);
 
 
 % Initialize array to store OCR results
 ocr_results = cell(size(freq_points,1), 1);
-
-
+% %DEBUG
+% figure, imshow(grayImg);
 
 % Process OCR for each point in freq_points
 for i = 1:size(freq_points,1)
     % Calculate bounding points for OCR area
     if i == 1
         % For the first point, use the original approach since there's no previous point
-        a = abs(freq_points(i,1) - 1) / 2;
+        a = abs(freq_points(i,1) - 1) / 2.2;
     else
         % For other points, calculate 'a' based on the difference with the previous point
-        a = abs(freq_points(i,1) - freq_points(i-1,1)) / 2;
+        a = abs(freq_points(i,1) - freq_points(i-1,1)) / 2.2;
     end
     
     point1 = [freq_points(i,1) - a, freq_points(i,2)];
@@ -530,13 +531,27 @@ for i = 1:size(freq_points,1)
     
     % Perform OCR
     ocr_results{i} = ocr(img, ocr_area, 'LayoutAnalysis', 'Block', 'CharacterSet', "0124568k");
+    if length(ocr_results{i}.Words)<1 || ocr_results{i}.WordConfidences<5e-2
+        continue;
+    end
 
+    % % Plot corners of the OCR area
+    % hold on;
+    % % Top-left corner
+    % plot(point1(1), 1, 'gs', 'MarkerSize', 4, 'LineWidth', 1);
+    % % Top-right corner
+    %  plot(point1(1) + (point2(1) - point1(1)), 1, 'gs', 'MarkerSize', 4, 'LineWidth', 1);
+    % % Bottom-right corner
+    % plot(point1(1) + (point2(1) - point1(1)), point1(2) - 1, 'gs', 'MarkerSize', 4, 'LineWidth', 1);
+    % % Bottom-left corner
+    % plot(point1(1), point1(2) - 1, 'gs', 'MarkerSize', 4, 'LineWidth', 1);
+    % 
+    % % Optional: Draw the rectangle connecting the corners
+    % rectangle('Position', ocr_area, 'EdgeColor', 'r');
+    % 
+    % % % Print result (optional)
+    % % % disp(['Point ' num2str(i) ': ' ocr_results{i}.Text]);
 end
 
-% TODO: Decibel ax
-
-
-
-
-
-
+% Ensure the figure is updated
+hold off;
