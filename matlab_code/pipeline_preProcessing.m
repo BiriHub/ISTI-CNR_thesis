@@ -597,12 +597,53 @@ end
 % Ensure the figure is updated
 hold off;
 
+%% 
+% % Soluzion per trovare i cerchi nel grafico
+% [centers, radii, metric] = imfindcircles(grayImg,[6 6],"ObjectPolarity","dark");
+% 
+% figure;imshow(grayImg);
+% hold on;
+% viscircles(centers, radii,'EdgeColor','b');
+
+%% 
+%% 1. Caricamento e preprocessing
+close all;
+
+% Filtro Gaussiano per ridurre il rumore
+% filtered_img = imgaussfilt(grayImg, 1);
+
+
+% filtered_img = imbinarize(filtered_img,"global");
+filtered_img = edge(grayImg, 'Canny');
+% filtered_img=imtophat(grayImg,strel("diamond",8));
+
+filtered_img=imdilate(filtered_img,strel("square",4 ));
+
+filtered_img = imerode(filtered_img,strel("diamond",4));
+
+% filtered_img = imclose (filtered_img,strel("disk",5));
+
+
+% filtered_img = bwareaopen (filtered_img,15);
 
 
 
-
-[centers, radii, metric] = imfindcircles(grayImg,[9 30],"ObjectPolarity","dark");
-
-figure;imshow(grayImg);
+stats = regionprops(filtered_img, 'Centroid', 'Area');
+areas = [stats.Area];
+valid_idx = find(areas > 100 & areas < 200); % Esclude rumore e sfondo
+centroids = vertcat(stats(valid_idx).Centroid);
+figure;imshow(filtered_img);
 hold on;
-viscircles(centers, radii,'EdgeColor','b');
+plot(centroids(:,1), centroids(:,2), 'r+', 'MarkerSize', 20, 'LineWidth', 2);
+title('Centroidi delle aree rilevate', 'FontSize', 14);
+
+
+
+%% 2. Binarizzazione e pulizia
+% Binarizza l'immagine (soglia adattiva)
+% binary_img = imcomplement(bin_img); % Inverti se le "X" sono scure
+
+% Operazioni morfologiche
+cleaned_img = bwareaopen(bin_img, 30); % Rimuovi oggetti <30 pixel
+se = strel('disk', 2);
+cleaned_img = imdilate(cleaned_img, se); % Rafforza le forme
