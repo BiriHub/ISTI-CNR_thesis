@@ -164,11 +164,6 @@ ocr_decibel_results = ocr(img, [1,grid_points(1,2), left_area_width, left_area_h
 
 % Get the left-lower corner of the first frequency number (125)
 % [x , y+height]
-
-% if the ocr does not detect the frequency text, then throws an exception
-if ocr_frequency_results.Words(1)~="125"
-    throw(MException('ocrDetection:firstFrequencyNotFound','OCR is not valid: first frequency axis value has not been detected (125Hz)'));
-end
 left_lower_boundingBox_first_freq = [ocr_frequency_results.WordBoundingBoxes(1,1), ocr_frequency_results.WordBoundingBoxes(1,2)+ocr_frequency_results.WordBoundingBoxes(1,4)];
 
 
@@ -177,19 +172,11 @@ left_lower_boundingBox_first_freq = [ocr_frequency_results.WordBoundingBoxes(1,1
 %Note : this is used as a double check to be completely sure that the
 %points are valid
 
-% % if the ocr does not detect the frequency text, then throws an exception
-% if ocr_frequency_results.Words(end)~="16k"
-%     throw(MException('ocrDetection:lastFrequencyNotFound','OCR is not valid: last frequency axis value has not been detected (16kHz)'));
-% end
 right_lower_boundingBox_last_freq = [ocr_frequency_results.WordBoundingBoxes(end,1)+ocr_frequency_results.WordBoundingBoxes(end,3), ocr_frequency_results.WordBoundingBoxes(end,2)+ocr_frequency_results.WordBoundingBoxes(end,4)];
 
 % Get the right-upper corner of the first decibel number (-10)
 % [x+weight , y]
 
-% if the ocr does not detect the decibel text, then throws an exception
-if ocr_decibel_results.Words(1)~="-10"
-    throw(MException('ocrDetection:firstDecibelNotFound','OCR is not valid: first decibel axis value has not been detected (-10db)'));
-end
 right_upper_boundingBox_first_dec = [ocr_decibel_results.WordBoundingBoxes(1,1)+ocr_decibel_results.WordBoundingBoxes(1,3), ocr_decibel_results.WordBoundingBoxes(1,2)];
 
 % Get the right-lower corner of the last decibel number (120)
@@ -197,10 +184,6 @@ right_upper_boundingBox_first_dec = [ocr_decibel_results.WordBoundingBoxes(1,1)+
 %Note : this is used as a double check to be completely sure that the
 %points are valid
 
-% % if the ocr does not detect the decibel text, then throws an exception
-% if ocr_decibel_results.Words(end)~="120"
-%     throw(MException('ocrDetection:lastDecibelNotFound','OCR is not valid: last decibel axis value has not been detected (120db)'));
-% end
 right_lower_boundingBox_last_dec = [ocr_decibel_results.WordBoundingBoxes(end,1)+ocr_decibel_results.WordBoundingBoxes(end,3), ocr_decibel_results.WordBoundingBoxes(end,2)+ocr_decibel_results.WordBoundingBoxes(end,4)];
 
 
@@ -237,22 +220,22 @@ end
 refined_grid_points = refined_grid_points_cropped + [x-1, y-1];
 
 
-% % DEBUG
-% figure;
-% imshow(cropped_bin_img);
-% hold on;
-% plot(refined_grid_points_cropped(:,1), refined_grid_points_cropped(:,2), 'rx', 'MarkerSize', 8, 'LineWidth', 2);
-% hold off;
-% % Display in original image coordinates
-% figure;
-% imshow(bin_img);
-% hold on;
-% plot(grid_points(:,1), grid_points(:,2), 'mo', 'MarkerSize', 8, 'LineWidth', 2);
-% plot(refined_grid_points(:,1), refined_grid_points(:,2), 'rx', 'MarkerSize', 8, 'LineWidth', 2);
-% % Transform points back to original coordinates for display
-% points_original = points + [x-1, y-1];
-% plot(points_original(:,1), points_original(:,2), 'gx', 'MarkerSize', 1, 'LineWidth', 2);
-% title('Adjusted grid corners');
+% DEBUG
+figure;
+imshow(cropped_bin_img);
+hold on;
+plot(refined_grid_points_cropped(:,1), refined_grid_points_cropped(:,2), 'rx', 'MarkerSize', 8, 'LineWidth', 2);
+hold off;
+% Display in original image coordinates
+figure;
+imshow(bin_img);
+hold on;
+plot(grid_points(:,1), grid_points(:,2), 'mo', 'MarkerSize', 8, 'LineWidth', 2);
+plot(refined_grid_points(:,1), refined_grid_points(:,2), 'rx', 'MarkerSize', 8, 'LineWidth', 2);
+% Transform points back to original coordinates for display
+points_original = points + [x-1, y-1];
+plot(points_original(:,1), points_original(:,2), 'gx', 'MarkerSize', 1, 'LineWidth', 2);
+title('Adjusted grid corners');
 
 % Initialize the adjusted grid corner segment variables
 grid_corner_lines = struct('point1', {}, 'point2', {});
@@ -462,7 +445,7 @@ intersectionPoints = intersectionPoints(1:k-1, :);
 % DEGUB
 figure, imshow(grayImg), hold on;
 
-plot(intersectionPoints(:,1), intersectionPoints(:,2), 'ro', 'MarkerSize', 3, 'LineWidth', 1);
+plot(intersectionPoints(:,1), intersectionPoints(:,2), 'ro', 'MarkerSize', 4, 'LineWidth', 1);
 
 title('Grid intersection points');
 
@@ -485,7 +468,7 @@ end
 
 % Frequency
 upper_corner=max(grid_corner_lines(1).point1(2),grid_corner_lines(1).point2(2));
-idx = find(intersectionPoints(:,2) <= upper_corner);
+idx = intersectionPoints(:,2) <= upper_corner;
 freq_points = sortrows(intersectionPoints(idx,:));
 if size(freq_points,1) ~= 13
     throw(MException('sizeError:Error','The number of points is not sufficient'));
@@ -501,20 +484,24 @@ end
 % freq_points = freq_points(keep_indices, :);
 
 
-% Initialize array to store OCR results
-ocr_results = cell(size(freq_points,1), 1);
-% %DEBUG
-% figure, imshow(grayImg);
+% Initialize array to store OCR results for the frequency axis
+freq_ocr_results = cell(size(freq_points,1), 1);
+%DEBUG
+figure, imshow(grayImg);
 
 % Process OCR for each point in freq_points
 for i = 1:size(freq_points,1)
     % Calculate bounding points for OCR area
     if i == 1
         % For the first point, use the original approach since there's no previous point
-        a = abs(freq_points(i,1) - 1) / 2.2;
+        a = abs(freq_points(i,1) - 1) / 2.5;
+    elseif i == 13
+        % Given the last text results to be longer, the ocr requires a bigger
+        % area to correctly detect the string
+          a =abs(freq_points(i,1) - freq_points(i-1,1)) /2;
     else
         % For other points, calculate 'a' based on the difference with the previous point
-        a = abs(freq_points(i,1) - freq_points(i-1,1)) / 2.2;
+        a = abs(freq_points(i,1) - freq_points(i-1,1)) / 2.5;
     end
     
     point1 = [freq_points(i,1) - a, freq_points(i,2)];
@@ -523,35 +510,99 @@ for i = 1:size(freq_points,1)
     % Define rectangular area for OCR
     % [x, y, width, height]
 
-    width_ocr_area=point1(1)+(point2(1) - point1(1));
-    if width_ocr_area>img_max_height
+    width_ocr_area=point2(1)-point1(1);
+    if point1(1)+width_ocr_area>img_max_width
         width_ocr_area=img_max_width-point1(1)-1;
     end
+    
     ocr_area = [point1(1), 1, width_ocr_area, point1(2) - 1];
     
     % Perform OCR
-    ocr_results{i} = ocr(img, ocr_area, 'LayoutAnalysis', 'Block', 'CharacterSet', "0124568k");
-    if length(ocr_results{i}.Words)<1 || ocr_results{i}.WordConfidences<5e-2
+    freq_ocr_results{i} = ocr(img, ocr_area, 'LayoutAnalysis', 'Block', 'CharacterSet', "0124568k");
+    if length(freq_ocr_results{i}.Words)<1 
         continue;
     end
 
-    % % Plot corners of the OCR area
-    % hold on;
-    % % Top-left corner
-    % plot(point1(1), 1, 'gs', 'MarkerSize', 4, 'LineWidth', 1);
-    % % Top-right corner
-    %  plot(point1(1) + (point2(1) - point1(1)), 1, 'gs', 'MarkerSize', 4, 'LineWidth', 1);
-    % % Bottom-right corner
-    % plot(point1(1) + (point2(1) - point1(1)), point1(2) - 1, 'gs', 'MarkerSize', 4, 'LineWidth', 1);
-    % % Bottom-left corner
-    % plot(point1(1), point1(2) - 1, 'gs', 'MarkerSize', 4, 'LineWidth', 1);
-    % 
-    % % Optional: Draw the rectangle connecting the corners
-    % rectangle('Position', ocr_area, 'EdgeColor', 'r');
-    % 
-    % % % Print result (optional)
-    % % % disp(['Point ' num2str(i) ': ' ocr_results{i}.Text]);
+    % Plot corners of the OCR area
+    hold on;
+    % Top-left corner
+    plot(ocr_area(1), ocr_area(2), 'bs', 'MarkerSize', 4, 'LineWidth', 1);
+    % Top-right corner
+    plot(ocr_area(1) + ocr_area(3), ocr_area(2), 'gs', 'MarkerSize', 4, 'LineWidth', 1);
+    % Bottom-right corner
+    plot(ocr_area(1) + ocr_area(3), ocr_area(2) + ocr_area(4), 'gs', 'MarkerSize', 4, 'LineWidth', 1);
+    % Bottom-left corner
+    plot(ocr_area(1), ocr_area(2) + ocr_area(4), 'gs', 'MarkerSize', 4, 'LineWidth', 1);
+
+    % Optional: Draw the rectangle connecting the corners
+    rectangle('Position', ocr_area, 'EdgeColor', 'r');
+end
+
+% Decibel axis
+
+left_corner=max(grid_corner_lines(2).point1(1),grid_corner_lines(2).point2(1));
+idx = intersectionPoints(:,1) <= left_corner;
+dB_points = sortrows(intersectionPoints(idx,:));
+if size(dB_points,1) ~= 14
+    throw(MException('sizeError:Error','The number of points is not sufficient'));
+end
+
+% Initialize array to store OCR results for the frequency axis
+dB_ocr_results = cell(size(dB_points,1), 1);
+
+% Process OCR for each point in dB_points
+for i = 1:size(dB_points,1)
+    % Calculate bounding points for OCR area
+    if i == 1
+        % For the first point, use the original approach since there's no previous point
+        a = abs(dB_points(i,2) - 1) / 2;
+    else
+        % For other points, calculate 'a' based on the difference with the previous point
+        a = abs(dB_points(i,2) - dB_points(i-1,2)) / 2;
+    end
+    
+    point1 = [dB_points(i,1) , dB_points(i,2)-a];
+    point2 = [dB_points(i,1) , dB_points(i,2)+a];
+    
+
+    % check if the area is not out the image's y-axis boundary
+    height_ocr_area=point2(2)-point1(2);
+    if point1(2)+height_ocr_area>img_max_height
+        height_ocr_area=img_max_height-point1(2)-1;
+    end
+    
+    % Define rectangular area for OCR
+    % [x, y, width, height]
+    ocr_area = [1, point1(2), point1(1) - 1,height_ocr_area];
+        rectangle('Position', ocr_area, 'EdgeColor', 'r');
+
+    % Perform OCR
+    dB_ocr_results{i} = ocr(img, ocr_area, 'LayoutAnalysis', 'Block', 'CharacterSet', "0124568k");
+
+    % Plot corners of the OCR area
+    % Top-left corner
+    plot(ocr_area(1), ocr_area(2), 'bs', 'MarkerSize', 4, 'LineWidth', 1);
+    % Top-right corner
+    plot(ocr_area(1) + ocr_area(3), ocr_area(2), 'gs', 'MarkerSize', 4, 'LineWidth', 1);
+    % Bottom-right corner
+    plot(ocr_area(1) + ocr_area(3), ocr_area(2) + ocr_area(4), 'gs', 'MarkerSize', 4, 'LineWidth', 1);
+    % Bottom-left corner
+    plot(ocr_area(1), ocr_area(2) + ocr_area(4), 'gs', 'MarkerSize', 4, 'LineWidth', 1);
+
+    % Optional: Draw the rectangle connecting the corners
+    rectangle('Position', ocr_area, 'EdgeColor', 'r');
+
 end
 
 % Ensure the figure is updated
 hold off;
+
+
+
+
+
+[centers, radii, metric] = imfindcircles(grayImg,[9 30],"ObjectPolarity","dark");
+
+figure;imshow(grayImg);
+hold on;
+viscircles(centers, radii,'EdgeColor','b');
