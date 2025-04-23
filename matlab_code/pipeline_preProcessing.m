@@ -611,15 +611,106 @@ close all;
 
 % Filtro Gaussiano per ridurre il rumore
 % filtered_img = imgaussfilt(grayImg, 1);
+% TODO DA FINIRE
+x = max(refined_grid_points(1,1), refined_grid_points(3,1));
+y = max(refined_grid_points(1,2), refined_grid_points(2,2));
+cropped_img = imcrop (grayImg, [x,y,refined_grid_points(2,1)- x, refined_grid_points(3,2)-y]);
 
 
 % filtered_img = imbinarize(filtered_img,"global");
-filtered_img = edge(grayImg, 'Canny');
-% filtered_img=imtophat(grayImg,strel("diamond",8));
+filtered_img=imtophat(cropped_img,strel("disk",5));
 
-filtered_img=imdilate(filtered_img,strel("square",4 ));
+filtered_img=medfilt2(filtered_img, [4 4]);
 
-filtered_img = imerode(filtered_img,strel("diamond",4));
+% 1) Soglia e crea la maschera logica
+BW = filtered_img > 40;           % vero dove l0intensità > 35
+BW = bwareaopen(BW, 5);           % rimuove piccoli “punti” di area < 5 px (opzionale)
+
+% 2) Calcolo delle proprietà dei blob
+stats = regionprops(BW, 'Centroid', 'Area');
+
+% 3) Filtro per area (escludo blob troppo grandi o troppo piccoli)
+areas = [stats.Area];
+valid = (areas < 100) & (areas > 0);   % mantieni solo aree tra 1 e 100 px
+stats = stats(valid);
+
+% 4) Concateno i centroidi in una matrice [x y]
+centroids = cat(1, stats.Centroid);
+
+% 5) Trovo tutti i pixel thresholded (per il plot “grezzo”)
+[idxY, idxX] = find(BW);
+
+% 6) Visualizzo: background + tutti i punti + centroidi filtrati
+figure;
+imshow(filtered_img, []), hold on
+  % tutti i pixel > 35
+  plot(idxX, idxY, 'r.', 'MarkerSize', 4)
+  % centroidi dei blob validi
+  plot(centroids(:,1), centroids(:,2), 'go', ...
+       'MarkerSize', 10, 'LineWidth', 1.5)
+hold off
+title('Punti >35 (rossi) e loro centroidi validi (cerchi verdi)');
+
+
+% 7) Rimuovo i centroidi troppo isolati
+D = pdist2(centroids, centroids);      % matrice distanze
+D(1:size(D,1)+1:end) = inf;           % ignoro distanza zero su diagonale
+minDist = min(D, [], 2);              % distanza al vicino più prossimo
+
+dThresh = 10;                         % soglia in pixel (regola a piacere)
+keepIdx = minDist < dThresh;         % true per i centroidi “vicini” ad almeno un altro
+filteredC = centroids(keepIdx, :);
+
+% 8) Raggruppamento via k-means
+% (scegli k in base a quante regioni ti aspetti o in funzione di filteredC)
+if size(filteredC,1) > 1
+    k = 8;  % esempio: tre gruppi; modificalo o calcolalo dinamicamente
+    [idxK, C_kmeans] = kmeans(filteredC, k, ...
+                              'Replicates', 5, ...
+                              'Distance',   'sqeuclidean');
+else
+    C_kmeans = filteredC;  % troppo pochi punti: nessun clustering
+end
+
+% 9) Visualizzo tutti i passi
+figure; imshow(filtered_img, []); hold on
+  % tutti i pixel > soglia originale (rosso puntinato)
+  [allY, allX] = find(filtered_img>40);
+  plot(allX, allY, 'r.', 'MarkerSize', 3)
+
+  % centroidi iniziali (prima del filtro) – in giallo
+  plot(centroids(:,1), centroids(:,2), ...
+       'yo', 'MarkerSize', 6, 'LineWidth', 1)
+
+  % centroidi “vicini” sopravvissuti al filtro – in blu
+  plot(filteredC(:,1), filteredC(:,2), ...
+       'bs', 'MarkerSize', 8, 'LineWidth', 1.5)
+
+  % centri finali dei cluster k-means – in verde
+  plot(C_kmeans(:,1), C_kmeans(:,2), ...
+       'g*', 'MarkerSize', 12, 'LineWidth', 2)
+hold off
+title('pixel>40 (rosso), tutti i centroidi (giallo), filtrati (blu), kmeans (verde)');
+
+
+% T = adaptthresh(filtered_img, 0.95, 'ForegroundPolarity','dark');
+% BW = imbinarize(filtered_img, T);
+% % 2. Pulisci con apertura
+% 
+% % filtered_img=imdilate(BW,strel("square",2 ));
+% 
+% se = strel('square',2);
+% filtered_img = imopen(filtered_img, se);
+
+
+% filtered_img = imcomplement(filtered_img);
+% filtered_img = edge(filtered_img, 'Canny',[0.12 0.15]);
+% 
+% filtered_img=imdilate(filtered_img,strel("square",2 ));
+
+% filtered_img = imerode(filtered_img,strel("diamond",4));
+
+% filled_img = imfill(filtered_img, 'holes');
 
 % filtered_img = imclose (filtered_img,strel("disk",5));
 
