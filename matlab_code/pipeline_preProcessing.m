@@ -693,6 +693,82 @@ hold off
 title('pixel>40 (rosso), tutti i centroidi (giallo), filtrati (blu), kmeans (verde)');
 
 
+
+
+%% ALTRO APPROCCIo FUNZIONANTE, DA MIGLIORARE MA OK
+% Optimal approach for X exams
+ close all;
+% [centers, radii, metric] = imfindcircles(filtered_img, [10 40], ...
+%     'Sensitivity', 0.95, 'ObjectPolarity', 'bright');
+% k = 8; 
+% [idxK, C_kmeans] = kmeans(centers, k, ...
+%                               'Replicates', 5, ...
+%                               'Distance',   'sqeuclidean');
+
+
+% TODO: Optimal approach for O exams
+[centers, radii, metric] = imfindcircles(filtered_img, [10 40], ...
+    'Sensitivity', 0.95, 'ObjectPolarity', 'bright');
+k = 7; 
+[idxK, C_kmeans] = kmeans(centers, k, ...
+                              'Replicates', 5, ...
+                              'Distance',   'sqeuclidean');
+
+
+
+% 3. Visualizzo
+figure;
+imshow(filtered_img,[]), hold on
+viscircles(centers, radii,'EdgeColor','y');
+% plot(centers(:,1), centers(:,2), 'r+');
+ % centri finali dei cluster k-means – in verde
+  plot(C_kmeans(:,1), C_kmeans(:,2), ...
+       'g*', 'MarkerSize', 12, 'LineWidth', 2)
+
+% Numero di cerchi trovati
+N = size(centers, 1);
+
+% 2. Preparo i rettangoli [x y w h] e croppo i patch
+rects = zeros(N, 4);
+patches = cell(N, 1);
+variances = zeros(N, 1);
+for i = 1:N
+    xC = centers(i, 1);
+    yC = centers(i, 2);
+    r = radii(i);
+    % Rettangolo centrato sul cerchio
+    x = round(xC - r);
+    y = round(yC - r);
+    w = round(2*r);
+    h = round(2*r);
+    rects(i, :) = [x, y, w, h];
+    patches{i} = imcrop(filtered_img, rects(i, :));
+    % Calcola la varianza del patch
+    variances(i) = var(double(patches{i}(:)));
+    
+    % Colora il rettangolo in base alla varianza (rosso = alta varianza)
+    rectangle('Position', rects(i,:), 'EdgeColor', 'r', 'LineWidth', 2);
+   
+
+end
+ hold off;
+% 
+% % 4. Filtro i cerchi in base alla varianza
+% % Determina una soglia di varianza per distinguere aree di interesse
+% threshold = mean(variances); % Puoi aggiustare questo valore
+% valid_idx = variances < threshold;
+% 
+% % Visualizza solo i cerchi validi
+% figure;
+% imshow(filtered_img);
+% hold on;
+% viscircles(centers(valid_idx,:), radii(valid_idx), 'EdgeColor', 'g');
+% title('Cerchi selezionati dopo filtro varianza');
+% hold off;
+% 
+% % Estrai i centroidi finali
+% final_centers = centers(valid_idx,:);
+
 % T = adaptthresh(filtered_img, 0.95, 'ForegroundPolarity','dark');
 % BW = imbinarize(filtered_img, T);
 % % 2. Pulisci con apertura
