@@ -608,89 +608,227 @@ hold off;
 %% 
 %% 1. Caricamento e preprocessing
 close all;
-
-% Filtro Gaussiano per ridurre il rumore
-% filtered_img = imgaussfilt(grayImg, 1);
-% TODO DA FINIRE
-x = max(refined_grid_points(1,1), refined_grid_points(3,1));
-y = max(refined_grid_points(1,2), refined_grid_points(2,2));
-cropped_img = imcrop (grayImg, [x,y,refined_grid_points(2,1)- x, refined_grid_points(3,2)-y]);
-
-
-% filtered_img = imbinarize(filtered_img,"global");
-filtered_img=imtophat(cropped_img,strel("disk",5));
-
-filtered_img=medfilt2(filtered_img, [4 4]);
-
 % 1) Soglia e crea la maschera logica
-BW = filtered_img > 40;           % vero dove l0intensità > 35
-BW = bwareaopen(BW, 5);           % rimuove piccoli “punti” di area < 5 px (opzionale)
+BW = imbinarize(filtered_img,"global");
+BW = bwareaopen(BW, 10); % rimuove piccoli "punti" di area < 5 px (opzionale)
+BW = imdilate(BW, strel("disk",6));
 
-% 2) Calcolo delle proprietà dei blob
-stats = regionprops(BW, 'Centroid', 'Area');
+% 2) Calcolo delle proprietà dei blob originali
+original_stats = regionprops(BW, 'Centroid', 'Area', 'Orientation', "ConvexHull", "Eccentricity", "Solidity", "Circularity", "ConvexArea");
 
-% 3) Filtro per area (escludo blob troppo grandi o troppo piccoli)
-areas = [stats.Area];
-valid = (areas < 100) & (areas > 0);   % mantieni solo aree tra 1 e 100 px
-stats = stats(valid);
+% 3) Concateno i centroidi in una matrice [x y]
+centroids = cat(1, original_stats.Centroid);
 
-% 4) Concateno i centroidi in una matrice [x y]
-centroids = cat(1, stats.Centroid);
-
-% 5) Trovo tutti i pixel thresholded (per il plot “grezzo”)
-[idxY, idxX] = find(BW);
-
-% 6) Visualizzo: background + tutti i punti + centroidi filtrati
+% 4) Visualizzo: background + tutti i punti + centroidi filtrati
 figure;
-imshow(filtered_img, []), hold on
-  % tutti i pixel > 35
-  plot(idxX, idxY, 'r.', 'MarkerSize', 4)
-  % centroidi dei blob validi
-  plot(centroids(:,1), centroids(:,2), 'go', ...
-       'MarkerSize', 10, 'LineWidth', 1.5)
+imshow(BW, []), hold on
+% centroidi dei blob validi
+plot(centroids(:,1), centroids(:,2), 'go', 'MarkerSize', 10, 'LineWidth', 1.5)
 hold off
-title('Punti >35 (rossi) e loro centroidi validi (cerchi verdi)');
+title('Punti e centroidi validi');
 
+% 5) Crea un'immagine binaria per ogni ConvexHull e calcola le proprietà richieste
+hull_stats = struct([]);
+figure; 
+imshow(BW); 
+hold on;
 
-% 7) Rimuovo i centroidi troppo isolati
-D = pdist2(centroids, centroids);      % matrice distanze
-D(1:size(D,1)+1:end) = inf;           % ignoro distanza zero su diagonale
-minDist = min(D, [], 2);              % distanza al vicino più prossimo
+for k = 1:numel(original_stats)
+    % Estrai i vertici del convex hull
+    hull = original_stats(k).ConvexHull; % Nx2 array di [x,y]
+    
+    % Disegna il bordo del convex hull
+    plot(hull(:,1), hull(:,2), 'g-', 'LineWidth', 2);
+    
+    % Riempi il poligono (opzionale, con trasparenza)
+    patch(hull(:,1), hull(:,2), 'r', 'FaceAlpha', 0.3, 'EdgeColor', 'none');
+    
+    % Crea una maschera binaria dal ConvexHull
+    hull_mask = false(size(BW));
+    
+    % Converti i punti del hull in una maschera binaria
+    hull_poly = polyshape(hull(:,1), hull(:,2));
+    [y, x] = meshgrid(1:size(BW,2), 1:size(BW,1));
+    in_poly = isinterior(hull_poly, y(:), x(:));
+    hull_mask(in_poly) = true;
+    
+    % Calcola le proprietà specifiche richieste per il ConvexHull
+    props = regionprops(hull_mask, 'Centroid', 'Area', 'Orientation', 'Eccentricity', 'Solidity', 'ConvexArea');
+    
+    % Calcola manualmente la Circularity (se non disponibile direttamente)
+    % Circularity = 4*pi*Area/Perimeter^2
+    hull_perim = regionprops(hull_mask, 'Perimeter');
+    props.Circularity = 4 * pi * props.Area / (hull_perim.Perimeter^2);
+    
+    % Memorizza il ConvexHull originale
+    props.ConvexHull = hull;
+    
+    % Aggiungi queste proprietà alla struttura hull_stats
+    if k == 1
+        hull_stats = props;
+    else
+        hull_stats(k) = props;
+    end
+    
+    % Visualizza alcune proprietà chiave
+    text(props.Centroid(1), props.Centroid(2), ...
+        sprintf('Area: %.1f\nEcc: %.2f\nCirc: %.2f', props.Area, props.Eccentricity, props.Circularity), ...
+        'Color', 'white', 'FontSize', 8, 'HorizontalAlignment', 'center', 'BackgroundColor', [0 0 0 0.5]);
+end
+hold off;
+title('Analisi dei ConvexHull');
 
-dThresh = 10;                         % soglia in pixel (regola a piacere)
-keepIdx = minDist < dThresh;         % true per i centroidi “vicini” ad almeno un altro
-filteredC = centroids(keepIdx, :);
+% 6) Opzionale: Filtra in base alle proprietà dei ConvexHull
+% Ad esempio, mantieni solo i ConvexHull con bassa eccentricità e alta circolarità
+ecc_threshold = 0.8;     % Valore massimo di eccentricità (0-1, dove 0 è un cerchio)
+circ_threshold = 0.4;    % Valore minimo di circolarità (0-1, dove 1 è un cerchio perfetto)
+area_min = 100;          % Area minima
+area_max = 5000;         % Area massima
 
-% 8) Raggruppamento via k-means
-% (scegli k in base a quante regioni ti aspetti o in funzione di filteredC)
-if size(filteredC,1) > 1
-    k = 8;  % esempio: tre gruppi; modificalo o calcolalo dinamicamente
-    [idxK, C_kmeans] = kmeans(filteredC, k, ...
-                              'Replicates', 5, ...
-                              'Distance',   'sqeuclidean');
-else
-    C_kmeans = filteredC;  % troppo pochi punti: nessun clustering
+valid_hulls = [];
+for k = 1:numel(hull_stats)
+    if hull_stats(k).Eccentricity <= ecc_threshold && ...
+       hull_stats(k).Circularity >= circ_threshold && ...
+       hull_stats(k).Area >= area_min && hull_stats(k).Area <= area_max
+        valid_hulls = [valid_hulls, k];
+    end
 end
 
-% 9) Visualizzo tutti i passi
-figure; imshow(filtered_img, []); hold on
-  % tutti i pixel > soglia originale (rosso puntinato)
-  [allY, allX] = find(filtered_img>40);
-  plot(allX, allY, 'r.', 'MarkerSize', 3)
+% 7) Visualizza solo i ConvexHull filtrati
+figure;
+imshow(BW);
+hold on;
+for k = valid_hulls
+    hull = hull_stats(k).ConvexHull;
+    plot(hull(:,1), hull(:,2), 'g-', 'LineWidth', 2);
+    patch(hull(:,1), hull(:,2), 'g', 'FaceAlpha', 0.3, 'EdgeColor', 'none');
+    
+    % Mostra anche i centroidi dei ConvexHull validi
+    plot(hull_stats(k).Centroid(1), hull_stats(k).Centroid(2), 'r+', 'MarkerSize', 10, 'LineWidth', 2);
+    
+    % Etichetta ogni ConvexHull
+    text(hull_stats(k).Centroid(1), hull_stats(k).Centroid(2) + 15, ...
+        sprintf('%d', k), 'Color', 'y', 'FontSize', 12, 'FontWeight', 'bold', ...
+        'HorizontalAlignment', 'center');
+end
+hold off;
+title('ConvexHull filtrati per Eccentricità, Circolarità e Area');
 
-  % centroidi iniziali (prima del filtro) – in giallo
-  plot(centroids(:,1), centroids(:,2), ...
-       'yo', 'MarkerSize', 6, 'LineWidth', 1)
+% 8) Stampa le proprietà dei ConvexHull validi
+fprintf('Proprietà dei ConvexHull validi:\n');
+fprintf('ID\tArea\tConvexArea\tSolidity\tEccentricity\tCircularity\tOrientation\n');
+fprintf('--\t----\t----------\t--------\t-----------\t-----------\t----------\n');
+for k = valid_hulls
+    fprintf('%d\t%.1f\t%.1f\t\t%.3f\t\t%.3f\t\t%.3f\t\t%.1f\n', ...
+        k, hull_stats(k).Area, hull_stats(k).ConvexArea, hull_stats(k).Solidity, ...
+        hull_stats(k).Eccentricity, hull_stats(k).Circularity, hull_stats(k).Orientation);
+end
 
-  % centroidi “vicini” sopravvissuti al filtro – in blu
-  plot(filteredC(:,1), filteredC(:,2), ...
-       'bs', 'MarkerSize', 8, 'LineWidth', 1.5)
+% 9) Crea una maschera finale che include solo le regioni ConvexHull valide
+final_mask = false(size(BW));
+for k = valid_hulls
+    hull = hull_stats(k).ConvexHull;
+    hull_poly = polyshape(hull(:,1), hull(:,2));
+    [y, x] = meshgrid(1:size(BW,2), 1:size(BW,1));
+    in_poly = isinterior(hull_poly, y(:), x(:));
+    final_mask(in_poly) = true;
+end
 
-  % centri finali dei cluster k-means – in verde
-  plot(C_kmeans(:,1), C_kmeans(:,2), ...
-       'g*', 'MarkerSize', 12, 'LineWidth', 2)
-hold off
-title('pixel>40 (rosso), tutti i centroidi (giallo), filtrati (blu), kmeans (verde)');
+% Visualizza la maschera finale
+figure;
+imshow(final_mask);
+title('Maschera finale con solo i ConvexHull validi');
+
+% Opzionale: applica la maschera finale all'immagine originale per isolare le regioni di interesse
+filtered_result = BW & final_mask;
+figure;
+imshow(filtered_result);
+title('Risultato finale: solo le regioni di interesse');
+
+%%
+ % 1) Estrai i punti dell'immagine originale che appartengono alle regioni valide
+[filtered_y, filtered_x] = find(BW & final_mask);
+filtered_points = [filtered_x, filtered_y];  % Matrice Nx2 di coordinate [x,y]
+
+% 2) Applica K-means solo a questi punti filtrati
+k = 8;  % Numero di cluster desiderato - modificalo in base alle tue esigenze
+[idxK, C_kmeans] = kmeans(filtered_points, k, 'Replicates', 5, 'Distance', 'sqeuclidean');
+
+% 3) Visualizza i risultati
+figure;
+imshow(filtered_img, []);
+hold on;
+
+% Centroidi originali (prima del filtro) - in giallo
+plot(centroids(:,1), centroids(:,2), 'yo', 'MarkerSize', 6, 'LineWidth', 1);
+
+% ConvexHull validi - in verde trasparente
+for i = valid_hulls
+    hull = hull_stats(i).ConvexHull;
+    patch(hull(:,1), hull(:,2), 'g', 'FaceAlpha', 0.2, 'EdgeColor', 'g', 'LineWidth', 1);
+end
+
+% Centri dei cluster K-means - in rosso
+plot(C_kmeans(:,1), C_kmeans(:,2), 'r*', 'MarkerSize', 12, 'LineWidth', 2);
+
+% % 4) Visualizza i punti colorati in base al cluster a cui appartengono
+% colors = hsv(k);  % Genera una palette di colori per i cluster
+% for i = 1:k
+%     cluster_points = filtered_points(idxK == i, :);
+%     plot(cluster_points(:,1), cluster_points(:,2), '.', 'Color', colors(i,:), 'MarkerSize', 10);
+% 
+%     % Opzionale: aggiungi etichette ai centri dei cluster
+%     text(C_kmeans(i,1), C_kmeans(i,2) - 15, sprintf('C%d', i), ...
+%         'Color', 'white', 'FontSize', 10, 'FontWeight', 'bold', ...
+%         'HorizontalAlignment', 'center', 'BackgroundColor', [0 0 0 0.5]);
+% end
+
+hold off;
+title('K-means applicato alle regioni filtrate');
+
+
+
+% k = 8;  % esempio: tre gruppi; modificalo o calcolalo dinamicamente
+%     [idxK, C_kmeans] = kmeans(centroids, k, ...
+%                               'Replicates', 5, ...
+%                               'Distance',   'sqeuclidean');
+
+% % 7) Rimuovo i centroidi troppo isolati
+% D = pdist2(centroids, centroids);      % matrice distanze
+% D(1:size(D,1)+1:end) = inf;           % ignoro distanza zero su diagonale
+% minDist = min(D, [], 2);              % distanza al vicino più prossimo
+% 
+% dThresh = 15;                         % soglia in pixel (regola a piacere)
+% keepIdx = minDist > dThresh;         % true per i centroidi >vicini” ad almeno un altro
+% filteredC = centroids(keepIdx, :);
+% 
+% % 8) Raggruppamento via k-means
+% % (scegli k in base a quante regioni ti aspetti o in funzione di filteredC)
+% if size(filteredC,1) > 1
+%     k = 8;  % esempio: tre gruppi; modificalo o calcolalo dinamicamente
+%     [idxK, C_kmeans] = kmeans(filteredC, k, ...
+%                               'Replicates', 5, ...
+%                               'Distance',   'sqeuclidean');
+% else
+%     C_kmeans = filteredC;  % troppo pochi punti: nessun clustering
+% end
+
+% % 9) Visualizzo tutti i passi
+% figure; imshow(filtered_img, []); hold on
+% 
+%   % centroidi iniziali (prima del filtro) – in giallo
+%   plot(centroids(:,1), centroids(:,2), ...
+%        'yo', 'MarkerSize', 6, 'LineWidth', 1)
+% 
+%   % centroidi “vicini” sopravvissuti al filtro – in blu
+%   % plot(filteredC(:,1), filteredC(:,2), ...
+%   %      'bs', 'MarkerSize', 8, 'LineWidth', 1.5)
+% 
+%   % centri finali dei cluster k-means – in verde
+%   plot(C_kmeans(:,1), C_kmeans(:,2), ...
+%        'g*', 'MarkerSize', 12, 'LineWidth', 2)
+% hold off
+% title('pixel>40 (rosso), tutti i centroidi (giallo), filtrati (blu), kmeans (verde)');
 
 
 
@@ -698,21 +836,21 @@ title('pixel>40 (rosso), tutti i centroidi (giallo), filtrati (blu), kmeans (ver
 %% ALTRO APPROCCIo FUNZIONANTE, DA MIGLIORARE MA OK
 % Optimal approach for X exams
  close all;
-% [centers, radii, metric] = imfindcircles(filtered_img, [10 40], ...
-%     'Sensitivity', 0.95, 'ObjectPolarity', 'bright');
-% k = 8; 
-% [idxK, C_kmeans] = kmeans(centers, k, ...
-%                               'Replicates', 5, ...
-%                               'Distance',   'sqeuclidean');
-
-
-% TODO: Optimal approach for O exams
-[centers, radii, metric] = imfindcircles(filtered_img, [10 40], ...
-    'Sensitivity', 0.95, 'ObjectPolarity', 'bright');
-k = 7; 
+[centers, radii, metric] = imfindcircles(BW, [10 40], ...
+    'Sensitivity', 0.95, 'ObjectPolarity', 'bright',"Method","TwoStage");
+k = 8; 
 [idxK, C_kmeans] = kmeans(centers, k, ...
                               'Replicates', 5, ...
                               'Distance',   'sqeuclidean');
+
+
+% % TODO: Optimal approach for O exams
+% [centers, radii, metric] = imfindcircles(filtered_img, [10 40], ...
+%     'Sensitivity', 0.95, 'ObjectPolarity', 'dark');
+% k = 7; 
+% [idxK, C_kmeans] = kmeans(centers, k, ...
+%                               'Replicates', 5, ...
+%                               'Distance',   'sqeuclidean');
 
 
 
@@ -795,22 +933,21 @@ end
 
 
 
-stats = regionprops(filtered_img, 'Centroid', 'Area');
-areas = [stats.Area];
-valid_idx = find(areas > 100 & areas < 200); % Esclude rumore e sfondo
-centroids = vertcat(stats(valid_idx).Centroid);
-figure;imshow(filtered_img);
-hold on;
-plot(centroids(:,1), centroids(:,2), 'r+', 'MarkerSize', 20, 'LineWidth', 2);
-title('Centroidi delle aree rilevate', 'FontSize', 14);
+% stats = regionprops(filtered_img, 'Centroid', 'Area');
+% areas = [stats.Area];
+% valid_idx = find(areas > 100 & areas < 200); % Esclude rumore e sfondo
+% centroids = vertcat(stats(valid_idx).Centroid);
+% hold on;
+% % plot(centroids(:,1), centroids(:,2), 'r+', 'MarkerSize', 20, 'LineWidth', 2);
+% title('Centroidi delle aree rilevate', 'FontSize', 14);
 
 
-
-%% 2. Binarizzazione e pulizia
-% Binarizza l'immagine (soglia adattiva)
-% binary_img = imcomplement(bin_img); % Inverti se le "X" sono scure
-
-% Operazioni morfologiche
-cleaned_img = bwareaopen(bin_img, 30); % Rimuovi oggetti <30 pixel
-se = strel('disk', 2);
-cleaned_img = imdilate(cleaned_img, se); % Rafforza le forme
+% 
+% %% 2. Binarizzazione e pulizia
+% % Binarizza l'immagine (soglia adattiva)
+% % binary_img = imcomplement(bin_img); % Inverti se le "X" sono scure
+% 
+% % Operazioni morfologiche
+% cleaned_img = bwareaopen(bin_img, 30); % Rimuovi oggetti <30 pixel
+% se = strel('disk', 2);
+% cleaned_img = imdilate(cleaned_img, se); % Rafforza le forme
