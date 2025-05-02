@@ -16,7 +16,6 @@ grayImg = medfilt2(grayImg); % median filter to reduce errors (3 by 3)
 % Apply the Canny operator to obtain the binary edge map
 bin_img = edge(grayImg, 'Canny');
 
-
 % Dilation
 edgeMap = imdilate(bin_img, strel('line',3,0)) | imdilate(bin_img, strel('line',3,90));
 
@@ -597,6 +596,9 @@ end
 % Ensure the figure is updated
 hold off;
 
+
+
+
 %% 
 % % Soluzion per trovare i cerchi nel grafico
 % [centers, radii, metric] = imfindcircles(grayImg,[6 6],"ObjectPolarity","dark");
@@ -605,13 +607,33 @@ hold off;
 % hold on;
 % viscircles(centers, radii,'EdgeColor','b');
 
-%% 
-%% 1. Caricamento e preprocessing
+%% % FINAL PART
+
+x = max(refined_grid_points(1,1), refined_grid_points(3,1));
+y = max(refined_grid_points(1,2), refined_grid_points(2,2));
+cropped_img = imcrop (grayImg, [x,y,refined_grid_points(2,1)- x, refined_grid_points(3,2)-y]);
+
+
+% filtered_img = imbinarize(filtered_img,"global");
+filtered_img=imtophat(cropped_img,strel("disk",5));
+filtered_img = imopen (filtered_img,strel("square",3));
+
+filtered_img = imadjust(filtered_img,[0.1 0.2],[]);
+
+
+
+figure; imshow(filtered_img);
+
+%%
+
+% 1. Caricamento e preprocessing
 close all;
 % 1) Soglia e crea la maschera logica
 BW = imbinarize(filtered_img,"global");
 BW = bwareaopen(BW, 10); % rimuove piccoli "punti" di area < 5 px (opzionale)
 BW = imdilate(BW, strel("disk",6));
+
+figure; imshow(BW);
 
 % 2) Calcolo delle proprietà dei blob originali
 original_stats = regionprops(BW, 'Centroid', 'Area', 'Orientation', "ConvexHull", "Eccentricity", "Solidity", "Circularity", "ConvexArea");
