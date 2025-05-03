@@ -3,7 +3,7 @@
 clc; clear; close all;
 
 % Load image
-img = imread('Noah_01_02_01.jpg');
+img = imread('Noah_01_01_02.jpg');
 grayImg = rgb2gray(img);
 grayImg = medfilt2(grayImg); % median filter to reduce errors (3 by 3)
 
@@ -219,22 +219,22 @@ end
 refined_grid_points = refined_grid_points_cropped + [x-1, y-1];
 
 
-% DEBUG
-figure;
-imshow(cropped_bin_img);
-hold on;
-plot(refined_grid_points_cropped(:,1), refined_grid_points_cropped(:,2), 'rx', 'MarkerSize', 8, 'LineWidth', 2);
-hold off;
-% Display in original image coordinates
-figure;
-imshow(bin_img);
-hold on;
-plot(grid_points(:,1), grid_points(:,2), 'mo', 'MarkerSize', 8, 'LineWidth', 2);
-plot(refined_grid_points(:,1), refined_grid_points(:,2), 'rx', 'MarkerSize', 8, 'LineWidth', 2);
-% Transform points back to original coordinates for display
-points_original = points + [x-1, y-1];
-plot(points_original(:,1), points_original(:,2), 'gx', 'MarkerSize', 1, 'LineWidth', 2);
-title('Adjusted grid corners');
+% % DEBUG
+% figure;
+% imshow(cropped_bin_img);
+% hold on;
+% plot(refined_grid_points_cropped(:,1), refined_grid_points_cropped(:,2), 'rx', 'MarkerSize', 8, 'LineWidth', 2);
+% hold off;
+% % Display in original image coordinates
+% figure;
+% imshow(bin_img);
+% hold on;
+% plot(grid_points(:,1), grid_points(:,2), 'mo', 'MarkerSize', 8, 'LineWidth', 2);
+% plot(refined_grid_points(:,1), refined_grid_points(:,2), 'rx', 'MarkerSize', 8, 'LineWidth', 2);
+% % Transform points back to original coordinates for display
+% points_original = points + [x-1, y-1];
+% plot(points_original(:,1), points_original(:,2), 'gx', 'MarkerSize', 1, 'LineWidth', 2);
+% title('Adjusted grid corners');
 
 % Initialize the adjusted grid corner segment variables
 grid_corner_lines = struct('point1', {}, 'point2', {});
@@ -441,24 +441,24 @@ end
 % Optimize the size
 intersectionPoints = intersectionPoints(1:k-1, :);
 
-% DEGUB
-figure, imshow(grayImg), hold on;
-
-plot(intersectionPoints(:,1), intersectionPoints(:,2), 'ro', 'MarkerSize', 4, 'LineWidth', 1);
-
-title('Grid intersection points');
-
-
-for i = 1:length(grid_corner_lines)
-    % Punto 1 della linea
-    x_pt1 = grid_corner_lines(i).point1(1);
-    y_pt1 = grid_corner_lines(i).point1(2);
-    plot(x_pt1, y_pt1, 'bs', 'MarkerSize', 4, 'LineWidth', 1);    
-    % Punto 2 della linea
-    x_pt2 = grid_corner_lines(i).point2(1);
-    y_pt2 = grid_corner_lines(i).point2(2);
-    plot(x_pt2, y_pt2, 'bs', 'MarkerSize', 4, 'LineWidth', 1);
-end
+% % DEGUB
+% figure, imshow(grayImg), hold on;
+% 
+% plot(intersectionPoints(:,1), intersectionPoints(:,2), 'ro', 'MarkerSize', 4, 'LineWidth', 1);
+% 
+% title('Grid intersection points');
+% 
+% 
+% for i = 1:length(grid_corner_lines)
+%     % Punto 1 della linea
+%     x_pt1 = grid_corner_lines(i).point1(1);
+%     y_pt1 = grid_corner_lines(i).point1(2);
+%     plot(x_pt1, y_pt1, 'bs', 'MarkerSize', 4, 'LineWidth', 1);    
+%     % Punto 2 della linea
+%     x_pt2 = grid_corner_lines(i).point2(1);
+%     y_pt2 = grid_corner_lines(i).point2(2);
+%     plot(x_pt2, y_pt2, 'bs', 'MarkerSize', 4, 'LineWidth', 1);
+% end
 
 %% OCR IMPROVEMENT
 
@@ -622,7 +622,7 @@ filtered_img = imadjust(filtered_img,[0.1 0.2],[]);
 
 
 
-figure; imshow(filtered_img);
+% figure; imshow(filtered_img);
 
 %%
 
@@ -631,141 +631,158 @@ close all;
 % 1) Soglia e crea la maschera logica
 BW = imbinarize(filtered_img,"global");
 BW = bwareaopen(BW, 10); % rimuove piccoli "punti" di area < 5 px (opzionale)
-BW = imdilate(BW, strel("disk",6));
+% BW = imdilate(BW, strel("disk",6));
+BW = bwskel(BW);
 
 figure; imshow(BW);
 
 % 2) Calcolo delle proprietà dei blob originali
 original_stats = regionprops(BW, 'Centroid', 'Area', 'Orientation', "ConvexHull", "Eccentricity", "Solidity", "Circularity", "ConvexArea");
 
-% 3) Concateno i centroidi in una matrice [x y]
-centroids = cat(1, original_stats.Centroid);
+% Estrai tutti i valori di ConvexArea
+convexAreas = [original_stats.ConvexArea];
 
-% 4) Visualizzo: background + tutti i punti + centroidi filtrati
+% Trova gli indici di quelli che sono almeno 10
+valid_idx = convexAreas < 10;
+
+% Costruisci un nuovo array di struct con solo i blob validi
+filtered_stats = original_stats(valid_idx);
+
+filtered_centroids = cat(1, filtered_stats.Centroid);
+
+% Visualizza
 figure;
 imshow(BW, []), hold on
-% centroidi dei blob validi
-plot(centroids(:,1), centroids(:,2), 'go', 'MarkerSize', 10, 'LineWidth', 1.5)
+plot(filtered_centroids(:,1), filtered_centroids(:,2), 'go', ...
+     'MarkerSize', 10, 'LineWidth', 1.5)
 hold off
-title('Punti e centroidi validi');
+title('Centroidi con ConvexArea >= 10');
 
-% 5) Crea un'immagine binaria per ogni ConvexHull e calcola le proprietà richieste
-hull_stats = struct([]);
-figure; 
-imshow(BW); 
-hold on;
+% Centroidi in Nx2
+C = filtered_centroids;  
 
-for k = 1:numel(original_stats)
-    % Estrai i vertici del convex hull
-    hull = original_stats(k).ConvexHull; % Nx2 array di [x,y]
-    
-    % Disegna il bordo del convex hull
-    plot(hull(:,1), hull(:,2), 'g-', 'LineWidth', 2);
-    
-    % Riempi il poligono (opzionale, con trasparenza)
-    patch(hull(:,1), hull(:,2), 'r', 'FaceAlpha', 0.3, 'EdgeColor', 'none');
-    
-    % Crea una maschera binaria dal ConvexHull
-    hull_mask = false(size(BW));
-    
-    % Converti i punti del hull in una maschera binaria
-    hull_poly = polyshape(hull(:,1), hull(:,2));
-    [y, x] = meshgrid(1:size(BW,2), 1:size(BW,1));
-    in_poly = isinterior(hull_poly, y(:), x(:));
-    hull_mask(in_poly) = true;
-    
-    % Calcola le proprietà specifiche richieste per il ConvexHull
-    props = regionprops(hull_mask, 'Centroid', 'Area', 'Orientation', 'Eccentricity', 'Solidity', 'ConvexArea');
-    
-    % Calcola manualmente la Circularity (se non disponibile direttamente)
-    % Circularity = 4*pi*Area/Perimeter^2
-    hull_perim = regionprops(hull_mask, 'Perimeter');
-    props.Circularity = 4 * pi * props.Area / (hull_perim.Perimeter^2);
-    
-    % Memorizza il ConvexHull originale
-    props.ConvexHull = hull;
-    
-    % Aggiungi queste proprietà alla struttura hull_stats
-    if k == 1
-        hull_stats = props;
-    else
-        hull_stats(k) = props;
-    end
-    
-    % Visualizza alcune proprietà chiave
-    text(props.Centroid(1), props.Centroid(2), ...
-        sprintf('Area: %.1f\nEcc: %.2f\nCirc: %.2f', props.Area, props.Eccentricity, props.Circularity), ...
-        'Color', 'white', 'FontSize', 8, 'HorizontalAlignment', 'center', 'BackgroundColor', [0 0 0 0.5]);
+% Parametri di DBSCAN
+epsilon = 30;   % raggio di vicinanza
+minPts  = 3;    % numero minimo di punti per considerare un cluster
+
+% clusterIdx: 1,2,3,... per i cluster; -1 per i rumori (punti isolati)
+[clusterIdx,corepts] = dbscan(C, epsilon, minPts);
+
+% Trova i cluster numerati (escludendo il rumore = -1)
+uc = unique(clusterIdx);
+uc(uc==-1) = [];
+nClusters = numel(uc);
+
+% Stampa in console
+for k = uc.'
+    pts = C(clusterIdx==k, :);
+    fprintf("Cluster %d (%d punti):\n", k, size(pts,1));
+    disp(pts);
 end
-hold off;
-title('Analisi dei ConvexHull');
+noise_pts = C(clusterIdx==-1, :);
+fprintf("Rumore (clusterIdx = -1), %d punti:\n", size(noise_pts,1));
+disp(noise_pts);
+
+% Ora visualizziamo tutto
+figure; imshow(BW, []); hold on
+
+% Prepara una mappa di colori
+colors = lines(nClusters);  % nClusters colori distinti
+
+% Plot dei cluster
+for i = 1:nClusters
+    k = uc(i);
+    pts = C(clusterIdx==k, :);
+    plot(pts(:,1), pts(:,2), 'o', ...
+     'MarkerSize', 10, 'LineWidth', 1.5);
+end
+
+% Plot dei rumori, se presenti
+if ~isempty(noise_pts)
+    plot(noise_pts(:,1), noise_pts(:,2), 'kx', ...
+         'MarkerSize', 8, 'LineWidth', 1.5, ...
+         'DisplayName', 'Rumore');
+end
+
+legend('show', 'Location', 'bestoutside')
+title('Distribuzione dei centroidi per cluster')
+hold off
+
+%%
 
 % 6) Opzionale: Filtra in base alle proprietà dei ConvexHull
 % Ad esempio, mantieni solo i ConvexHull con bassa eccentricità e alta circolarità
-ecc_threshold = 0.8;     % Valore massimo di eccentricità (0-1, dove 0 è un cerchio)
-circ_threshold = 0.4;    % Valore minimo di circolarità (0-1, dove 1 è un cerchio perfetto)
-area_min = 100;          % Area minima
-area_max = 5000;         % Area massima
+% ecc_threshold = 0.8;     % Valore massimo di eccentricità (0-1, dove 0 è un cerchio)
+% circ_threshold = 0.4;    % Valore minimo di circolarità (0-1, dove 1 è un cerchio perfetto)
+% area_min = 100;          % Area minima
+% area_max = 5000;         % Area massima
 
-valid_hulls = [];
-for k = 1:numel(hull_stats)
-    if hull_stats(k).Eccentricity <= ecc_threshold && ...
-       hull_stats(k).Circularity >= circ_threshold && ...
-       hull_stats(k).Area >= area_min && hull_stats(k).Area <= area_max
-        valid_hulls = [valid_hulls, k];
-    end
-end
+% 1) Trova gli indici dei convex hull validi
+valid_idx = find([hull_stats.Area] < 10);
 
-% 7) Visualizza solo i ConvexHull filtrati
+% 2) Estrai i centroidi in un Nx2
+all_centroids = reshape([hull_stats(valid_idx).Centroid], 2, [])';
+
+% 4) Visualizza su immagine
 figure;
-imshow(BW);
-hold on;
-for k = valid_hulls
-    hull = hull_stats(k).ConvexHull;
-    plot(hull(:,1), hull(:,2), 'g-', 'LineWidth', 2);
-    patch(hull(:,1), hull(:,2), 'g', 'FaceAlpha', 0.3, 'EdgeColor', 'none');
-    
-    % Mostra anche i centroidi dei ConvexHull validi
-    plot(hull_stats(k).Centroid(1), hull_stats(k).Centroid(2), 'r+', 'MarkerSize', 10, 'LineWidth', 2);
-    
-    % Etichetta ogni ConvexHull
-    text(hull_stats(k).Centroid(1), hull_stats(k).Centroid(2) + 15, ...
-        sprintf('%d', k), 'Color', 'y', 'FontSize', 12, 'FontWeight', 'bold', ...
-        'HorizontalAlignment', 'center');
-end
-hold off;
-title('ConvexHull filtrati per Eccentricità, Circolarità e Area');
+imshow(BW, []), hold on
+plot(all_centroids(:,1), all_centroids(:,2), 'go', ...
+     'MarkerSize', 10, 'LineWidth', 1.5)
+hold off
+title('Punti VALIDI');
 
-% 8) Stampa le proprietà dei ConvexHull validi
-fprintf('Proprietà dei ConvexHull validi:\n');
-fprintf('ID\tArea\tConvexArea\tSolidity\tEccentricity\tCircularity\tOrientation\n');
-fprintf('--\t----\t----------\t--------\t-----------\t-----------\t----------\n');
-for k = valid_hulls
-    fprintf('%d\t%.1f\t%.1f\t\t%.3f\t\t%.3f\t\t%.3f\t\t%.1f\n', ...
-        k, hull_stats(k).Area, hull_stats(k).ConvexArea, hull_stats(k).Solidity, ...
-        hull_stats(k).Eccentricity, hull_stats(k).Circularity, hull_stats(k).Orientation);
-end
 
-% 9) Crea una maschera finale che include solo le regioni ConvexHull valide
-final_mask = false(size(BW));
-for k = valid_hulls
-    hull = hull_stats(k).ConvexHull;
-    hull_poly = polyshape(hull(:,1), hull(:,2));
-    [y, x] = meshgrid(1:size(BW,2), 1:size(BW,1));
-    in_poly = isinterior(hull_poly, y(:), x(:));
-    final_mask(in_poly) = true;
-end
-
-% Visualizza la maschera finale
-figure;
-imshow(final_mask);
-title('Maschera finale con solo i ConvexHull validi');
-
-% Opzionale: applica la maschera finale all'immagine originale per isolare le regioni di interesse
-filtered_result = BW & final_mask;
-figure;
-imshow(filtered_result);
-title('Risultato finale: solo le regioni di interesse');
+% 
+% % 7) Visualizza solo i ConvexHull filtrati
+% figure;
+% imshow(BW);
+% hold on;
+% for k = valid_hulls
+%     hull = hull_stats(k).ConvexHull;
+%     plot(hull(:,1), hull(:,2), 'g-', 'LineWidth', 2);
+%     patch(hull(:,1), hull(:,2), 'g', 'FaceAlpha', 0.3, 'EdgeColor', 'none');
+% 
+%     % Mostra anche i centroidi dei ConvexHull validi
+%     plot(hull_stats(k).Centroid(1), hull_stats(k).Centroid(2), 'r+', 'MarkerSize', 10, 'LineWidth', 2);
+% 
+%     % Etichetta ogni ConvexHull
+%     text(hull_stats(k).Centroid(1), hull_stats(k).Centroid(2) + 15, ...
+%         sprintf('%d', k), 'Color', 'y', 'FontSize', 12, 'FontWeight', 'bold', ...
+%         'HorizontalAlignment', 'center');
+% end
+% hold off;
+% title('ConvexHull filtrati per Eccentricità, Circolarità e Area');
+% 
+% % 8) Stampa le proprietà dei ConvexHull validi
+% fprintf('Proprietà dei ConvexHull validi:\n');
+% fprintf('ID\tArea\tConvexArea\tSolidity\tEccentricity\tCircularity\tOrientation\n');
+% fprintf('--\t----\t----------\t--------\t-----------\t-----------\t----------\n');
+% for k = valid_hulls
+%     fprintf('%d\t%.1f\t%.1f\t\t%.3f\t\t%.3f\t\t%.3f\t\t%.1f\n', ...
+%         k, hull_stats(k).Area, hull_stats(k).ConvexArea, hull_stats(k).Solidity, ...
+%         hull_stats(k).Eccentricity, hull_stats(k).Circularity, hull_stats(k).Orientation);
+% end
+% 
+% % 9) Crea una maschera finale che include solo le regioni ConvexHull valide
+% final_mask = false(size(BW));
+% for k = valid_hulls
+%     hull = hull_stats(k).ConvexHull;
+%     hull_poly = polyshape(hull(:,1), hull(:,2));
+%     [y, x] = meshgrid(1:size(BW,2), 1:size(BW,1));
+%     in_poly = isinterior(hull_poly, y(:), x(:));
+%     final_mask(in_poly) = true;
+% end
+% 
+% % Visualizza la maschera finale
+% figure;
+% imshow(final_mask);
+% title('Maschera finale con solo i ConvexHull validi');
+% 
+% % Opzionale: applica la maschera finale all'immagine originale per isolare le regioni di interesse
+% filtered_result = BW & final_mask;
+% figure;
+% imshow(filtered_result);
+% title('Risultato finale: solo le regioni di interesse');
 
 %%
  % 1) Estrai i punti dell'immagine originale che appartengono alle regioni valide
