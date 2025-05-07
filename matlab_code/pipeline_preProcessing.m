@@ -624,23 +624,25 @@ filtered_img = imadjust(cropped_img);
 % Apply the Canny operator to obtain the binary edge map
 BW = edge(filtered_img, 'Canny');
 
-edgeMap = imdilate(BW, strel('line',3,0)) | imdilate(BW,strel('line',3,90));
+BW = imdilate(BW, strel('line',3,0)) | imdilate(BW,strel('line',3,90));
 
 
-edgeMap = imdilate(edgeMap, strel("square", 2));
+BW = imdilate(BW, strel("square", 2));
 
-BW= bwmorph(edgeMap,'skeleton');
+% BW= bwmorph(BW,'skeleton');
+BW = bwskel(BW);
+
 figure ; imshow(BW);
 
-threshold = ceil(0.3 * max(H(:))); % Soglia più bassa per includere picchi meno prominenti
-nhood_size = floor(size(H)/100) * 2 + 1; % Dimensione dell'intorno più piccola
+threshold = ceil(0.5 * max(H(:))); % Soglia più bassa per includere picchi meno prominenti
+nhood_size = floor(size(H)/25) * 2 + 1; % Dimensione dell'intorno più piccola
 
 % Compute the Hough Transform
 [H, theta, rho] = hough(BW,'Theta',-85:-5);
 
 peaks = houghpeaks(H, 50,'Theta',-85:-5,'Threshold',threshold);
 % Extract the detected lines based on the found peaks
-lines = houghlines(BW, theta, rho, peaks);
+lines = houghlines(BW, theta, rho, peaks,"MinLength",50);
 
 % DEBUG
 figure;
