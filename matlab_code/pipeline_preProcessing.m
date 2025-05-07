@@ -634,6 +634,9 @@ BW = bwareaopen(BW, 10); % rimuove piccoli "punti" di area < 5 px (opzionale)
 % BW = imdilate(BW, strel("disk",6));
 BW = bwskel(BW);
 
+BW = BW & ~bwmorph(BW,'branchpoints');
+BW = bwmorph(BW,'spur');
+
 figure; imshow(BW);
 
 % 2) Calcolo delle proprietà dei blob originali
@@ -642,7 +645,7 @@ original_stats = regionprops(BW, 'Centroid', 'Area', 'Orientation', "ConvexHull"
 % Estrai tutti i valori di ConvexArea
 convexAreas = [original_stats.ConvexArea];
 
-% Trova gli indici di quelli che sono almeno 10
+% Trova gli indici di quelli che sono almeno 10, exclude 
 valid_idx = convexAreas < 10;
 
 % Costruisci un nuovo array di struct con solo i blob validi
@@ -663,7 +666,7 @@ C = filtered_centroids;
 
 % Parametri di DBSCAN
 epsilon = 30;   % raggio di vicinanza
-minPts  = 3;    % numero minimo di punti per considerare un cluster
+minPts  = 2;    % numero minimo di punti per considerare un cluster
 
 % clusterIdx: 1,2,3,... per i cluster; -1 per i rumori (punti isolati)
 [clusterIdx,corepts] = dbscan(C, epsilon, minPts);
@@ -673,63 +676,47 @@ uc = unique(clusterIdx);
 uc(uc==-1) = [];
 nClusters = numel(uc);
 
-% Stampa in console
-for k = uc.'
-    pts = C(clusterIdx==k, :);
-    fprintf("Cluster %d (%d punti):\n", k, size(pts,1));
-    disp(pts);
-end
-noise_pts = C(clusterIdx==-1, :);
-fprintf("Rumore (clusterIdx = -1), %d punti:\n", size(noise_pts,1));
-disp(noise_pts);
 
-% Ora visualizziamo tutto
+% Dopo aver eseguito DBSCAN e identificato i cluster
 figure; imshow(BW, []); hold on
 
 % Prepara una mappa di colori
-colors = lines(nClusters);  % nClusters colori distinti
+colors = lines(nClusters);
 
-% Plot dei cluster
+% Inizializza un array per memorizzare i centroidi dei cluster
+cluster_centroids = zeros(nClusters, 2);
+
+% Plot dei cluster e calcolo dei loro centroidi
 for i = 1:nClusters
     k = uc(i);
     pts = C(clusterIdx==k, :);
-    plot(pts(:,1), pts(:,2), 'o', ...
-     'MarkerSize', 10, 'LineWidth', 1.5);
+    
+    % Calcola il centroide del cluster come media dei punti
+    cluster_centroid = mean(pts, 1);
+    cluster_centroids(i,:) = cluster_centroid;
+   
+    % Plot dei punti del cluster
+    plot(pts(:,1), pts(:,2),  'o', ...
+'MarkerSize', 10, 'LineWidth', 1.5);
+    
+    % Plot del centroide del cluster con un marker diverso e più grande
+    plot(cluster_centroid(1), cluster_centroid(2), 'yo', ...
+'MarkerSize', 10, 'LineWidth', 1.5);
 end
 
-% Plot dei rumori, se presenti
-if ~isempty(noise_pts)
-    plot(noise_pts(:,1), noise_pts(:,2), 'kx', ...
-         'MarkerSize', 8, 'LineWidth', 1.5, ...
-         'DisplayName', 'Rumore');
-end
 
-legend('show', 'Location', 'bestoutside')
-title('Distribuzione dei centroidi per cluster')
+title('Distribuzione dei centroidi per cluster con centroidi dei cluster')
 hold off
+
+figure; imshow(cropped_img); hold on; 
+plot(cluster_centroids(:,1), cluster_centroids(:,2), 'yo', ...
+'MarkerSize', 10, 'LineWidth', 1.5);
+hold off;
+
 
 %%
 
-% 6) Opzionale: Filtra in base alle proprietà dei ConvexHull
-% Ad esempio, mantieni solo i ConvexHull con bassa eccentricità e alta circolarità
-% ecc_threshold = 0.8;     % Valore massimo di eccentricità (0-1, dove 0 è un cerchio)
-% circ_threshold = 0.4;    % Valore minimo di circolarità (0-1, dove 1 è un cerchio perfetto)
-% area_min = 100;          % Area minima
-% area_max = 5000;         % Area massima
 
-% 1) Trova gli indici dei convex hull validi
-valid_idx = find([hull_stats.Area] < 10);
-
-% 2) Estrai i centroidi in un Nx2
-all_centroids = reshape([hull_stats(valid_idx).Centroid], 2, [])';
-
-% 4) Visualizza su immagine
-figure;
-imshow(BW, []), hold on
-plot(all_centroids(:,1), all_centroids(:,2), 'go', ...
-     'MarkerSize', 10, 'LineWidth', 1.5)
-hold off
-title('Punti VALIDI');
 
 
 % 
@@ -785,45 +772,45 @@ title('Punti VALIDI');
 % title('Risultato finale: solo le regioni di interesse');
 
 %%
- % 1) Estrai i punti dell'immagine originale che appartengono alle regioni valide
-[filtered_y, filtered_x] = find(BW & final_mask);
-filtered_points = [filtered_x, filtered_y];  % Matrice Nx2 di coordinate [x,y]
-
-% 2) Applica K-means solo a questi punti filtrati
-k = 8;  % Numero di cluster desiderato - modificalo in base alle tue esigenze
-[idxK, C_kmeans] = kmeans(filtered_points, k, 'Replicates', 5, 'Distance', 'sqeuclidean');
-
-% 3) Visualizza i risultati
-figure;
-imshow(filtered_img, []);
-hold on;
-
-% Centroidi originali (prima del filtro) - in giallo
-plot(centroids(:,1), centroids(:,2), 'yo', 'MarkerSize', 6, 'LineWidth', 1);
-
-% ConvexHull validi - in verde trasparente
-for i = valid_hulls
-    hull = hull_stats(i).ConvexHull;
-    patch(hull(:,1), hull(:,2), 'g', 'FaceAlpha', 0.2, 'EdgeColor', 'g', 'LineWidth', 1);
-end
-
-% Centri dei cluster K-means - in rosso
-plot(C_kmeans(:,1), C_kmeans(:,2), 'r*', 'MarkerSize', 12, 'LineWidth', 2);
-
-% % 4) Visualizza i punti colorati in base al cluster a cui appartengono
-% colors = hsv(k);  % Genera una palette di colori per i cluster
-% for i = 1:k
-%     cluster_points = filtered_points(idxK == i, :);
-%     plot(cluster_points(:,1), cluster_points(:,2), '.', 'Color', colors(i,:), 'MarkerSize', 10);
+%  % 1) Estrai i punti dell'immagine originale che appartengono alle regioni valide
+% [filtered_y, filtered_x] = find(BW & final_mask);
+% filtered_points = [filtered_x, filtered_y];  % Matrice Nx2 di coordinate [x,y]
 % 
-%     % Opzionale: aggiungi etichette ai centri dei cluster
-%     text(C_kmeans(i,1), C_kmeans(i,2) - 15, sprintf('C%d', i), ...
-%         'Color', 'white', 'FontSize', 10, 'FontWeight', 'bold', ...
-%         'HorizontalAlignment', 'center', 'BackgroundColor', [0 0 0 0.5]);
+% % 2) Applica K-means solo a questi punti filtrati
+% k = 8;  % Numero di cluster desiderato - modificalo in base alle tue esigenze
+% [idxK, C_kmeans] = kmeans(filtered_points, k, 'Replicates', 5, 'Distance', 'sqeuclidean');
+% 
+% % 3) Visualizza i risultati
+% figure;
+% imshow(filtered_img, []);
+% hold on;
+% 
+% % Centroidi originali (prima del filtro) - in giallo
+% plot(centroids(:,1), centroids(:,2), 'yo', 'MarkerSize', 6, 'LineWidth', 1);
+% 
+% % ConvexHull validi - in verde trasparente
+% for i = valid_hulls
+%     hull = hull_stats(i).ConvexHull;
+%     patch(hull(:,1), hull(:,2), 'g', 'FaceAlpha', 0.2, 'EdgeColor', 'g', 'LineWidth', 1);
 % end
-
-hold off;
-title('K-means applicato alle regioni filtrate');
+% 
+% % Centri dei cluster K-means - in rosso
+% plot(C_kmeans(:,1), C_kmeans(:,2), 'r*', 'MarkerSize', 12, 'LineWidth', 2);
+% 
+% % % 4) Visualizza i punti colorati in base al cluster a cui appartengono
+% % colors = hsv(k);  % Genera una palette di colori per i cluster
+% % for i = 1:k
+% %     cluster_points = filtered_points(idxK == i, :);
+% %     plot(cluster_points(:,1), cluster_points(:,2), '.', 'Color', colors(i,:), 'MarkerSize', 10);
+% % 
+% %     % Opzionale: aggiungi etichette ai centri dei cluster
+% %     text(C_kmeans(i,1), C_kmeans(i,2) - 15, sprintf('C%d', i), ...
+% %         'Color', 'white', 'FontSize', 10, 'FontWeight', 'bold', ...
+% %         'HorizontalAlignment', 'center', 'BackgroundColor', [0 0 0 0.5]);
+% % end
+% 
+% hold off;
+% title('K-means applicato alle regioni filtrate');
 
 
 
@@ -872,63 +859,63 @@ title('K-means applicato alle regioni filtrate');
 
 
 
-%% ALTRO APPROCCIo FUNZIONANTE, DA MIGLIORARE MA OK
-% Optimal approach for X exams
- close all;
-[centers, radii, metric] = imfindcircles(BW, [10 40], ...
-    'Sensitivity', 0.95, 'ObjectPolarity', 'bright',"Method","TwoStage");
-k = 8; 
-[idxK, C_kmeans] = kmeans(centers, k, ...
-                              'Replicates', 5, ...
-                              'Distance',   'sqeuclidean');
-
-
-% % TODO: Optimal approach for O exams
-% [centers, radii, metric] = imfindcircles(filtered_img, [10 40], ...
-%     'Sensitivity', 0.95, 'ObjectPolarity', 'dark');
-% k = 7; 
+% %% ALTRO APPROCCIo FUNZIONANTE, DA MIGLIORARE MA OK
+% % Optimal approach for X exams
+%  close all;
+% [centers, radii, metric] = imfindcircles(BW, [10 40], ...
+%     'Sensitivity', 0.95, 'ObjectPolarity', 'bright',"Method","TwoStage");
+% k = 8; 
 % [idxK, C_kmeans] = kmeans(centers, k, ...
 %                               'Replicates', 5, ...
 %                               'Distance',   'sqeuclidean');
-
-
-
-% 3. Visualizzo
-figure;
-imshow(filtered_img,[]), hold on
-viscircles(centers, radii,'EdgeColor','y');
-% plot(centers(:,1), centers(:,2), 'r+');
- % centri finali dei cluster k-means – in verde
-  plot(C_kmeans(:,1), C_kmeans(:,2), ...
-       'g*', 'MarkerSize', 12, 'LineWidth', 2)
-
-% Numero di cerchi trovati
-N = size(centers, 1);
-
-% 2. Preparo i rettangoli [x y w h] e croppo i patch
-rects = zeros(N, 4);
-patches = cell(N, 1);
-variances = zeros(N, 1);
-for i = 1:N
-    xC = centers(i, 1);
-    yC = centers(i, 2);
-    r = radii(i);
-    % Rettangolo centrato sul cerchio
-    x = round(xC - r);
-    y = round(yC - r);
-    w = round(2*r);
-    h = round(2*r);
-    rects(i, :) = [x, y, w, h];
-    patches{i} = imcrop(filtered_img, rects(i, :));
-    % Calcola la varianza del patch
-    variances(i) = var(double(patches{i}(:)));
-    
-    % Colora il rettangolo in base alla varianza (rosso = alta varianza)
-    rectangle('Position', rects(i,:), 'EdgeColor', 'r', 'LineWidth', 2);
-   
-
-end
- hold off;
+% 
+% 
+% % % TODO: Optimal approach for O exams
+% % [centers, radii, metric] = imfindcircles(filtered_img, [10 40], ...
+% %     'Sensitivity', 0.95, 'ObjectPolarity', 'dark');
+% % k = 7; 
+% % [idxK, C_kmeans] = kmeans(centers, k, ...
+% %                               'Replicates', 5, ...
+% %                               'Distance',   'sqeuclidean');
+% 
+% 
+% 
+% % 3. Visualizzo
+% figure;
+% imshow(filtered_img,[]), hold on
+% viscircles(centers, radii,'EdgeColor','y');
+% % plot(centers(:,1), centers(:,2), 'r+');
+%  % centri finali dei cluster k-means – in verde
+%   plot(C_kmeans(:,1), C_kmeans(:,2), ...
+%        'g*', 'MarkerSize', 12, 'LineWidth', 2)
+% 
+% % Numero di cerchi trovati
+% N = size(centers, 1);
+% 
+% % 2. Preparo i rettangoli [x y w h] e croppo i patch
+% rects = zeros(N, 4);
+% patches = cell(N, 1);
+% variances = zeros(N, 1);
+% for i = 1:N
+%     xC = centers(i, 1);
+%     yC = centers(i, 2);
+%     r = radii(i);
+%     % Rettangolo centrato sul cerchio
+%     x = round(xC - r);
+%     y = round(yC - r);
+%     w = round(2*r);
+%     h = round(2*r);
+%     rects(i, :) = [x, y, w, h];
+%     patches{i} = imcrop(filtered_img, rects(i, :));
+%     % Calcola la varianza del patch
+%     variances(i) = var(double(patches{i}(:)));
+% 
+%     % Colora il rettangolo in base alla varianza (rosso = alta varianza)
+%     rectangle('Position', rects(i,:), 'EdgeColor', 'r', 'LineWidth', 2);
+% 
+% 
+% end
+%  hold off;
 % 
 % % 4. Filtro i cerchi in base alla varianza
 % % Determina una soglia di varianza per distinguere aree di interesse
