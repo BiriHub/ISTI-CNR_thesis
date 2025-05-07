@@ -608,28 +608,85 @@ hold off;
 % viscircles(centers, radii,'EdgeColor','b');
 
 %% % FINAL PART
+close all;
 
 x = max(refined_grid_points(1,1), refined_grid_points(3,1));
 y = max(refined_grid_points(1,2), refined_grid_points(2,2));
 cropped_img = imcrop (grayImg, [x,y,refined_grid_points(2,1)- x, refined_grid_points(3,2)-y]);
 
+% filtered_img=imtophat(cropped_img,strel("disk",5));
+% filtered_img = imopen (filtered_img,strel("square",3));
 
-% filtered_img = imbinarize(filtered_img,"global");
-filtered_img=imtophat(cropped_img,strel("disk",5));
-filtered_img = imopen (filtered_img,strel("square",3));
-
-filtered_img = imadjust(filtered_img,[0.1 0.2],[]);
-
+% filtered_img = imadjust(cropped_img,[0.8 0.9],[0 1]);
+filtered_img = imadjust(cropped_img);
 
 
-% figure; imshow(filtered_img);
+% Apply the Canny operator to obtain the binary edge map
+BW = edge(filtered_img, 'Canny');
 
-%%
+edgeMap = imdilate(BW, strel('line',3,0)) | imdilate(BW,strel('line',3,90));
 
+
+edgeMap = imdilate(edgeMap, strel("square", 2));
+
+BW= bwmorph(edgeMap,'skeleton');
+figure ; imshow(BW);
+
+threshold = ceil(0.3 * max(H(:))); % Soglia più bassa per includere picchi meno prominenti
+nhood_size = floor(size(H)/100) * 2 + 1; % Dimensione dell'intorno più piccola
+
+% Compute the Hough Transform
+[H, theta, rho] = hough(BW,'Theta',-85:-5);
+
+peaks = houghpeaks(H, 50,'Theta',-85:-5,'Threshold',threshold);
+% Extract the detected lines based on the found peaks
+lines = houghlines(BW, theta, rho, peaks);
+
+% DEBUG
+figure;
+imshow(BW);
+hold on;
+for k = 1:length(lines)
+    xy = [lines(k).point1; lines(k).point2];
+    plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', 'green');
+    % Display the starting and ending points of the lines
+    plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
+    plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
+end
+
+title('1 HOUGH');
+hold off;
+
+% 
+% % Compute the Hough Transform
+% [H, theta, rho] = hough(BW,'Theta',-89:-3);
+% 
+% peaks = houghpeaks(H, 100);
+% % Extract the detected lines based on the found peaks
+% lines = houghlines(BW, theta, rho, peaks);
+% 
+% % DEBUG
+% figure;
+% imshow(BW);
+% hold on;
+% for k = 1:length(lines)
+%     xy = [lines(k).point1; lines(k).point2];
+%     plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', 'green');
+%     % Display the starting and ending points of the lines
+%     plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
+%     plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
+% end
+% 
+% title('2 HOUGH');
+% hold off;
+
+
+
+
+%% 
 % 1. Caricamento e preprocessing
 close all;
 % 1) Soglia e crea la maschera logica
-BW = imbinarize(filtered_img,"global");
 BW = bwareaopen(BW, 10); % rimuove piccoli "punti" di area < 5 px (opzionale)
 % BW = imdilate(BW, strel("disk",6));
 BW = bwskel(BW);
