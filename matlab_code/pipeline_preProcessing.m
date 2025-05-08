@@ -634,143 +634,151 @@ BW = bwskel(BW);
 
 figure ; imshow(BW);
 
-threshold = ceil(0.5 * max(H(:))); % Soglia più bassa per includere picchi meno prominenti
-nhood_size = floor(size(H)/25) * 2 + 1; % Dimensione dell'intorno più piccola
+% threshold = ceil(0.5 * max(H(:))); % Soglia più bassa per includere picchi meno prominenti
+% nhood_size = floor(size(H)/25) * 2 + 1; % Dimensione dell'intorno più piccola
 
 % Compute the Hough Transform
 [H, theta, rho] = hough(BW,'Theta',-85:-5);
 
-peaks = houghpeaks(H, 50,'Theta',-85:-5,'Threshold',threshold);
+peaks = houghpeaks(H, 50,'Theta',-85:-5);
 % Extract the detected lines based on the found peaks
-lines = houghlines(BW, theta, rho, peaks,"MinLength",50);
+lines1 = houghlines(BW, theta, rho, peaks,"MinLength",50,"FillGap",15);
 
-% DEBUG
+[H, theta, rho] = hough(BW,'Theta',5:85);
+
+peaks = houghpeaks(H, 50,'Theta',5:85);
+% Extract the detected lines based on the found peaks
+lines2 = houghlines(BW, theta, rho, peaks,"MinLength",50,"FillGap",15);
+
+
+% estrai theta e rho in due vettori riga
+theta = [lines1(:).theta lines2(:).theta];
+rho   = [lines1(:).rho lines2(:).rho];
+
+% ora scatter funziona correttamente
 figure;
-imshow(BW);
-hold on;
-for k = 1:length(lines)
-    xy = [lines(k).point1; lines(k).point2];
-    plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', 'green');
-    % Display the starting and ending points of the lines
-    plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
-    plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
-end
+scatter(theta, rho, 50, 'filled');
+xlabel('\theta [rad]');
+ylabel('\rho');
+title('Distribuzione di \theta vs \rho');
+grid on;
 
-title('1 HOUGH');
-hold off;
 
-% 
-% % Compute the Hough Transform
-% [H, theta, rho] = hough(BW,'Theta',-89:-3);
-% 
-% peaks = houghpeaks(H, 100);
-% % Extract the detected lines based on the found peaks
-% lines = houghlines(BW, theta, rho, peaks);
-% 
 % % DEBUG
 % figure;
 % imshow(BW);
 % hold on;
-% for k = 1:length(lines)
-%     xy = [lines(k).point1; lines(k).point2];
+% for k = 1:length(lines1)
+%     xy = [lines1(k).point1; lines1(k).point2];
 %     plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', 'green');
 %     % Display the starting and ending points of the lines
 %     plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
 %     plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
 % end
 % 
-% title('2 HOUGH');
+% for k = 1:length(lines2)
+%     xy = [lines2(k).point1; lines2(k).point2];
+%     plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', 'green');
+%     % Display the starting and ending points of the lines
+%     plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
+%     plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
+% end
+% 
+% title('Hough');
+%  hold off;
+
+
+ 
+
+
+ %%
+
+% %% 
+% % 1. Caricamento e preprocessing
+% close all;
+% % 1) Soglia e crea la maschera logica
+% BW = bwareaopen(BW, 10); % rimuove piccoli "punti" di area < 5 px (opzionale)
+% % BW = imdilate(BW, strel("disk",6));
+% BW = bwskel(BW);
+% 
+% BW = BW & ~bwmorph(BW,'branchpoints');
+% BW = bwmorph(BW,'spur');
+% 
+% figure; imshow(BW);
+% 
+% % 2) Calcolo delle proprietà dei blob originali
+% original_stats = regionprops(BW, 'Centroid', 'Area', 'Orientation', "ConvexHull", "Eccentricity", "Solidity", "Circularity", "ConvexArea");
+% 
+% % Estrai tutti i valori di ConvexArea
+% convexAreas = [original_stats.ConvexArea];
+% 
+% % Trova gli indici di quelli che sono almeno 10, exclude 
+% valid_idx = convexAreas < 10;
+% 
+% % Costruisci un nuovo array di struct con solo i blob validi
+% filtered_stats = original_stats(valid_idx);
+% 
+% filtered_centroids = cat(1, filtered_stats.Centroid);
+% 
+% % Visualizza
+% figure;
+% imshow(BW, []), hold on
+% plot(filtered_centroids(:,1), filtered_centroids(:,2), 'go', ...
+%      'MarkerSize', 10, 'LineWidth', 1.5)
+% hold off
+% title('Centroidi con ConvexArea >= 10');
+% 
+% % Centroidi in Nx2
+% C = filtered_centroids;  
+% 
+% % Parametri di DBSCAN
+% epsilon = 30;   % raggio di vicinanza
+% minPts  = 2;    % numero minimo di punti per considerare un cluster
+% 
+% % clusterIdx: 1,2,3,... per i cluster; -1 per i rumori (punti isolati)
+% [clusterIdx,corepts] = dbscan(C, epsilon, minPts);
+% 
+% % Trova i cluster numerati (escludendo il rumore = -1)
+% uc = unique(clusterIdx);
+% uc(uc==-1) = [];
+% nClusters = numel(uc);
+% 
+% 
+% % Dopo aver eseguito DBSCAN e identificato i cluster
+% figure; imshow(BW, []); hold on
+% 
+% % Prepara una mappa di colori
+% colors = lines(nClusters);
+% 
+% % Inizializza un array per memorizzare i centroidi dei cluster
+% cluster_centroids = zeros(nClusters, 2);
+% 
+% % Plot dei cluster e calcolo dei loro centroidi
+% for i = 1:nClusters
+%     k = uc(i);
+%     pts = C(clusterIdx==k, :);
+% 
+%     % Calcola il centroide del cluster come media dei punti
+%     cluster_centroid = mean(pts, 1);
+%     cluster_centroids(i,:) = cluster_centroid;
+% 
+%     % Plot dei punti del cluster
+%     plot(pts(:,1), pts(:,2),  'o', ...
+% 'MarkerSize', 10, 'LineWidth', 1.5);
+% 
+%     % Plot del centroide del cluster con un marker diverso e più grande
+%     plot(cluster_centroid(1), cluster_centroid(2), 'yo', ...
+% 'MarkerSize', 10, 'LineWidth', 1.5);
+% end
+% 
+% 
+% title('Distribuzione dei centroidi per cluster con centroidi dei cluster')
+% hold off
+% 
+% figure; imshow(cropped_img); hold on; 
+% plot(cluster_centroids(:,1), cluster_centroids(:,2), 'yo', ...
+% 'MarkerSize', 10, 'LineWidth', 1.5);
 % hold off;
-
-
-
-
-%% 
-% 1. Caricamento e preprocessing
-close all;
-% 1) Soglia e crea la maschera logica
-BW = bwareaopen(BW, 10); % rimuove piccoli "punti" di area < 5 px (opzionale)
-% BW = imdilate(BW, strel("disk",6));
-BW = bwskel(BW);
-
-BW = BW & ~bwmorph(BW,'branchpoints');
-BW = bwmorph(BW,'spur');
-
-figure; imshow(BW);
-
-% 2) Calcolo delle proprietà dei blob originali
-original_stats = regionprops(BW, 'Centroid', 'Area', 'Orientation', "ConvexHull", "Eccentricity", "Solidity", "Circularity", "ConvexArea");
-
-% Estrai tutti i valori di ConvexArea
-convexAreas = [original_stats.ConvexArea];
-
-% Trova gli indici di quelli che sono almeno 10, exclude 
-valid_idx = convexAreas < 10;
-
-% Costruisci un nuovo array di struct con solo i blob validi
-filtered_stats = original_stats(valid_idx);
-
-filtered_centroids = cat(1, filtered_stats.Centroid);
-
-% Visualizza
-figure;
-imshow(BW, []), hold on
-plot(filtered_centroids(:,1), filtered_centroids(:,2), 'go', ...
-     'MarkerSize', 10, 'LineWidth', 1.5)
-hold off
-title('Centroidi con ConvexArea >= 10');
-
-% Centroidi in Nx2
-C = filtered_centroids;  
-
-% Parametri di DBSCAN
-epsilon = 30;   % raggio di vicinanza
-minPts  = 2;    % numero minimo di punti per considerare un cluster
-
-% clusterIdx: 1,2,3,... per i cluster; -1 per i rumori (punti isolati)
-[clusterIdx,corepts] = dbscan(C, epsilon, minPts);
-
-% Trova i cluster numerati (escludendo il rumore = -1)
-uc = unique(clusterIdx);
-uc(uc==-1) = [];
-nClusters = numel(uc);
-
-
-% Dopo aver eseguito DBSCAN e identificato i cluster
-figure; imshow(BW, []); hold on
-
-% Prepara una mappa di colori
-colors = lines(nClusters);
-
-% Inizializza un array per memorizzare i centroidi dei cluster
-cluster_centroids = zeros(nClusters, 2);
-
-% Plot dei cluster e calcolo dei loro centroidi
-for i = 1:nClusters
-    k = uc(i);
-    pts = C(clusterIdx==k, :);
-    
-    % Calcola il centroide del cluster come media dei punti
-    cluster_centroid = mean(pts, 1);
-    cluster_centroids(i,:) = cluster_centroid;
-   
-    % Plot dei punti del cluster
-    plot(pts(:,1), pts(:,2),  'o', ...
-'MarkerSize', 10, 'LineWidth', 1.5);
-    
-    % Plot del centroide del cluster con un marker diverso e più grande
-    plot(cluster_centroid(1), cluster_centroid(2), 'yo', ...
-'MarkerSize', 10, 'LineWidth', 1.5);
-end
-
-
-title('Distribuzione dei centroidi per cluster con centroidi dei cluster')
-hold off
-
-figure; imshow(cropped_img); hold on; 
-plot(cluster_centroids(:,1), cluster_centroids(:,2), 'yo', ...
-'MarkerSize', 10, 'LineWidth', 1.5);
-hold off;
 
 
 %%
