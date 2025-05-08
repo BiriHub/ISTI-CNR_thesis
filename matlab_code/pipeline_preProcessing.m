@@ -664,32 +664,107 @@ title('Distribuzione di \theta vs \rho');
 grid on;
 
 
-% % DEBUG
-% figure;
-% imshow(BW);
-% hold on;
-% for k = 1:length(lines1)
-%     xy = [lines1(k).point1; lines1(k).point2];
-%     plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', 'green');
-%     % Display the starting and ending points of the lines
-%     plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
-%     plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
-% end
-% 
-% for k = 1:length(lines2)
-%     xy = [lines2(k).point1; lines2(k).point2];
-%     plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', 'green');
-%     % Display the starting and ending points of the lines
-%     plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
-%     plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
-% end
-% 
-% title('Hough');
-%  hold off;
+% DEBUG
+figure;
+imshow(BW);
+hold on;
+for k = 1:length(lines1)
+    xy = [lines1(k).point1; lines1(k).point2];
+    plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', 'green');
+    % Display the starting and ending points of the lines
+    plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
+    plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
+end
+
+for k = 1:length(lines2)
+    xy = [lines2(k).point1; lines2(k).point2];
+    plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', 'green');
+    % Display the starting and ending points of the lines
+    plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
+    plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
+end
+
+title('Hough');
+ hold off;
 
 
- 
+%% Recognizing the segments ( by identify the cluster with BDSCAN)
 
+
+% Prepare data for DBSCAN
+% Combine theta and rho into a single matrix for clustering
+data = [theta', rho'];
+
+
+
+% Apply DBSCAN clustering
+% Parameters to tune:
+% - epsilon: maximum distance between two points to be considered neighbors
+% - minPts: minimum number of points required to form a dense region
+epsilon = 30; 
+
+minPts = 2;  % Minimum number of lines to form a cluster
+idx = dbscan(data, epsilon, minPts);
+
+% Get the number of clusters (excluding noise points which are labeled as -1)
+numClusters = max(idx);
+
+% Plot the clustering results
+figure;
+hold on;
+
+% Define a colormap for different clusters
+colors = hsv(numClusters);
+
+% Plot each cluster with a different color
+for i = 1:numClusters
+    clusterPoints = data(idx == i, :);
+    scatter(clusterPoints(:, 1), clusterPoints(:, 2), 70, colors(i, :), 'filled');
+end
+
+% Plot noise points (if any) in black
+noisePoints = data(idx == -1, :);
+if ~isempty(noisePoints)
+    scatter(noisePoints(:, 1), noisePoints(:, 2), 50, 'k', 'x');
+end
+
+hold off;
+xlabel('\theta [gradi]');
+ylabel('\rho');
+title('Risultato del clustering DBSCAN su theta vs rho');
+grid on;
+legend(['Cluster 1', repmat({''}, 1, numClusters-1), 'Noise'], 'Location', 'best');
+
+% Now visualize the lines from different clusters on the original image
+figure;
+imshow(filtered_img); % Show the filtered image
+hold on;
+
+% Plot lines from each cluster with different colors
+allLines = [lines1, lines2];
+for i = 1:numClusters
+    clusterLineIndices = find(idx == i);
+    
+    for j = 1:length(clusterLineIndices)
+        lineIdx = clusterLineIndices(j);
+        if lineIdx <= length(allLines)
+            line = allLines(lineIdx);
+            xy = [line.point1; line.point2];
+            plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', colors(i,:));
+        end
+    end
+end
+
+hold off;
+title('Linee raggruppate per cluster');
+
+% Display cluster statistics
+fprintf('Numero totale di cluster trovati: %d\n', numClusters);
+for i = 1:numClusters
+    clusterSize = sum(idx == i);
+    fprintf('Cluster %d: %d linee\n', i, clusterSize);
+end
+fprintf('Punti di rumore: %d\n', sum(idx == -1));
 
  %%
 
