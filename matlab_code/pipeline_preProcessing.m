@@ -626,8 +626,11 @@ BW = edge(filtered_img, 'Canny');
 
 BW = imdilate(BW, strel('line',3,0)) | imdilate(BW,strel('line',3,90));
 
+figure ; imshow(BW);
 
-BW = imdilate(BW, strel("square", 2));
+BW = imdilate(BW, strel("rectangle", [2 3])); % square = 2 non va bene per alcune immagini con O
+% Da testare una via di mezzo che vadi bene per tutti, tipo un disk o
+% diamond
 
 % BW= bwmorph(BW,'skeleton');
 BW = bwskel(BW);
@@ -640,131 +643,449 @@ figure ; imshow(BW);
 % Compute the Hough Transform
 [H, theta, rho] = hough(BW,'Theta',-85:-5);
 
-peaks = houghpeaks(H, 50,'Theta',-85:-5);
+peaks = houghpeaks(H, 60,'Theta',-85:-5); % 40 for the maximum possible measurement case
 % Extract the detected lines based on the found peaks
 lines1 = houghlines(BW, theta, rho, peaks,"MinLength",50,"FillGap",15);
 
 [H, theta, rho] = hough(BW,'Theta',5:85);
 
-peaks = houghpeaks(H, 50,'Theta',5:85);
+peaks = houghpeaks(H, 60,'Theta',5:85);
 % Extract the detected lines based on the found peaks
 lines2 = houghlines(BW, theta, rho, peaks,"MinLength",50,"FillGap",15);
 
+% all_lines = [lines1 lines2];
+% % Calculate centroids for all detected lines
+% centroids = zeros(length(all_lines), 2);
+% thetas = zeros(length(all_lines), 1);
+% rhos = zeros(length(all_lines), 1);
+% 
+% for k = 1:length(all_lines)
+%     % Calculate midpoint of each line
+%     pt1 = all_lines(k).point1;
+%     pt2 = all_lines(k).point2;
+%     centroids(k,:) = [(pt1(1) + pt2(1))/2, (pt1(2) + pt2(2))/2];
+% 
+%     % Store theta and rho values
+%     thetas(k) = all_lines(k).theta;
+%     rhos(k) = all_lines(k).rho;
+% end
+% 
+% 
+% 
 
-% estrai theta e rho in due vettori riga
-theta = [lines1(:).theta lines2(:).theta];
-rho   = [lines1(:).rho lines2(:).rho];
 
-% ora scatter funziona correttamente
-figure;
-scatter(theta, rho, 50, 'filled');
-xlabel('\theta [rad]');
-ylabel('\rho');
-title('Distribuzione di \theta vs \rho');
-grid on;
-
-
-% DEBUG
-figure;
-imshow(BW);
-hold on;
-for k = 1:length(lines1)
-    xy = [lines1(k).point1; lines1(k).point2];
-    plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', 'green');
-    % Display the starting and ending points of the lines
-    plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
-    plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
-end
-
-for k = 1:length(lines2)
-    xy = [lines2(k).point1; lines2(k).point2];
-    plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', 'green');
-    % Display the starting and ending points of the lines
-    plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
-    plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
-end
-
-title('Hough');
- hold off;
 
 
 %% Recognizing the segments ( by identify the cluster with BDSCAN)
 
+% Apply DBSCAN on the combined features
+% Confronto tra diverse configurazioni di DBSCAN
+% Calcolo dei centroidi delle linee rilevate
+all_lines = [lines1 lines2];
+centroids = zeros(length(all_lines), 2);
+thetas = zeros(length(all_lines), 1);
+rhos = zeros(length(all_lines), 1);
 
-% Prepare data for DBSCAN
-% Combine theta and rho into a single matrix for clustering
-data = [theta', rho'];
-
-
-
-% Apply DBSCAN clustering
-% Parameters to tune:
-% - epsilon: maximum distance between two points to be considered neighbors
-% - minPts: minimum number of points required to form a dense region
-epsilon = 30; 
-
-minPts = 2;  % Minimum number of lines to form a cluster
-idx = dbscan(data, epsilon, minPts);
-
-% Get the number of clusters (excluding noise points which are labeled as -1)
-numClusters = max(idx);
-
-% Plot the clustering results
-figure;
-hold on;
-
-% Define a colormap for different clusters
-colors = hsv(numClusters);
-
-% Plot each cluster with a different color
-for i = 1:numClusters
-    clusterPoints = data(idx == i, :);
-    scatter(clusterPoints(:, 1), clusterPoints(:, 2), 70, colors(i, :), 'filled');
-end
-
-% Plot noise points (if any) in black
-noisePoints = data(idx == -1, :);
-if ~isempty(noisePoints)
-    scatter(noisePoints(:, 1), noisePoints(:, 2), 50, 'k', 'x');
-end
-
-hold off;
-xlabel('\theta [gradi]');
-ylabel('\rho');
-title('Risultato del clustering DBSCAN su theta vs rho');
-grid on;
-legend(['Cluster 1', repmat({''}, 1, numClusters-1), 'Noise'], 'Location', 'best');
-
-% Now visualize the lines from different clusters on the original image
-figure;
-imshow(filtered_img); % Show the filtered image
-hold on;
-
-% Plot lines from each cluster with different colors
-allLines = [lines1, lines2];
-for i = 1:numClusters
-    clusterLineIndices = find(idx == i);
+for k = 1:length(all_lines)
+    % Calcola punto medio di ogni linea
+    pt1 = all_lines(k).point1;
+    pt2 = all_lines(k).point2;
+    centroids(k,:) = [(pt1(1) + pt2(1))/2, (pt1(2) + pt2(2))/2];
     
-    for j = 1:length(clusterLineIndices)
-        lineIdx = clusterLineIndices(j);
-        if lineIdx <= length(allLines)
-            line = allLines(lineIdx);
-            xy = [line.point1; line.point2];
-            plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', colors(i,:));
+    % Memorizza valori di theta e rho
+    thetas(k) = all_lines(k).theta;
+    rhos(k) = all_lines(k).rho;
+end
+
+% Crea matrice delle caratteristiche per il clustering
+% Normalizza le caratteristiche per dare uguale importanza
+centroid_x_norm = (centroids(:,1) - min(centroids(:,1))) / (max(centroids(:,1)) - min(centroids(:,1)));
+centroid_y_norm = (centroids(:,2) - min(centroids(:,2))) / (max(centroids(:,2)) - min(centroids(:,2)));
+thetas_norm = (thetas - min(thetas)) / (max(thetas) - min(thetas));
+rhos_norm = (rhos - min(rhos)) / (max(rhos) - min(rhos));
+
+% Matrice delle caratteristiche normalizzate
+data_norm = [centroid_x_norm, centroid_y_norm, thetas_norm, rhos_norm];
+
+% Parametri per DBSCAN
+epsilon = 0.3; % Epsilon per dati normalizzati (0-1)
+
+% Confronta diverse configurazioni di DBSCAN
+% Test con minPts = 1
+minPts1 = 1;
+idx1 = dbscan(data_norm, epsilon, minPts1);
+num_clusters1 = max(idx1);
+noise_points1 = sum(idx1 == -1);
+
+% Test con minPts = 2
+minPts2 = 2;
+idx2 = dbscan(data_norm, epsilon, minPts2);
+num_clusters2 = max(idx2);
+noise_points2 = sum(idx2 == -1);
+
+% Calcola metriche di valutazione
+silhouette_scores = zeros(2, 1);
+
+% Silhouette score per minPts = 1 (se ci sono almeno 2 cluster)
+if num_clusters1 > 1
+    valid_points = idx1 ~= -1;
+    if sum(valid_points) > 0 && length(unique(idx1(valid_points))) > 1
+        try
+            silhouette_scores(1) = mean(silhouette(data_norm(valid_points,:), idx1(valid_points)));
+        catch
+            silhouette_scores(1) = NaN;
+            disp('Impossibile calcolare Silhouette per minPts=1');
+        end
+    else
+        silhouette_scores(1) = NaN;
+    end
+else
+    silhouette_scores(1) = NaN;
+end
+
+% Silhouette score per minPts = 2 (se ci sono almeno 2 cluster)
+if num_clusters2 > 1
+    valid_points = idx2 ~= -1;
+    if sum(valid_points) > 0 && length(unique(idx2(valid_points))) > 1
+        try
+            silhouette_scores(2) = mean(silhouette(data_norm(valid_points,:), idx2(valid_points)));
+        catch
+            silhouette_scores(2) = NaN;
+            disp('Impossibile calcolare Silhouette per minPts=2');
+        end
+    else
+        silhouette_scores(2) = NaN;
+    end
+else
+    silhouette_scores(2) = NaN;
+end
+
+% Visualizza i risultati di confronto
+fprintf('Valutazione dei cluster:\n');
+fprintf('minPts=1: %d cluster, %d punti rumore, Silhouette=%.4f\n', ...
+        num_clusters1, noise_points1, silhouette_scores(1));
+fprintf('minPts=2: %d cluster, %d punti rumore, Silhouette=%.4f\n', ...
+        num_clusters2, noise_points2, silhouette_scores(2));
+
+% Davies-Bouldin Index (più basso è meglio)
+if num_clusters1 > 1
+    valid_points = idx1 ~= -1;
+    if sum(valid_points) > 0 && length(unique(idx1(valid_points))) > 1
+        try
+            db_index1 = evalclusters(data_norm(valid_points,:), idx1(valid_points), 'DaviesBouldin').CriterionValues;
+            fprintf('Davies-Bouldin Index (minPts=1): %.4f\n', db_index1);
+        catch
+            fprintf('Impossibile calcolare Davies-Bouldin per minPts=1\n');
         end
     end
 end
 
-hold off;
-title('Linee raggruppate per cluster');
-
-% Display cluster statistics
-fprintf('Numero totale di cluster trovati: %d\n', numClusters);
-for i = 1:numClusters
-    clusterSize = sum(idx == i);
-    fprintf('Cluster %d: %d linee\n', i, clusterSize);
+if num_clusters2 > 1
+    valid_points = idx2 ~= -1;
+    if sum(valid_points) > 0 && length(unique(idx2(valid_points))) > 1
+        try
+            db_index2 = evalclusters(data_norm(valid_points,:), idx2(valid_points), 'DaviesBouldin').CriterionValues;
+            fprintf('Davies-Bouldin Index (minPts=2): %.4f\n', db_index2);
+        catch
+            fprintf('Impossibile calcolare Davies-Bouldin per minPts=2\n');
+        end
+    end
 end
-fprintf('Punti di rumore: %d\n', sum(idx == -1));
+
+% Visualizzazione dei risultati di clustering
+
+% Impostazione colori per visualizzazione
+colors1 = hsv(num_clusters1);
+colors2 = hsv(num_clusters2);
+
+% Visualizzazione dei cluster con minPts=1
+figure;
+subplot(1,2,1);
+imshow(BW);
+hold on;
+title(['Clustering con minPts=1: ', num2str(num_clusters1), ' cluster']);
+
+for k = 1:length(all_lines)
+    if idx1(k) > 0  % Escludi punti rumore (-1)
+        cluster_color = colors1(idx1(k),:);
+        xy = [all_lines(k).point1; all_lines(k).point2];
+        plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', cluster_color);
+        % Visualizza i centroidi
+        plot(centroids(k,1), centroids(k,2), 'o', 'MarkerSize', 6, ...
+             'MarkerEdgeColor', cluster_color, 'MarkerFaceColor', cluster_color);
+    else
+        % Punti rumore in grigio
+        xy = [all_lines(k).point1; all_lines(k).point2];
+        plot(xy(:,1), xy(:,2), 'LineWidth', 1, 'Color', [0.7 0.7 0.7]);
+    end
+end
+hold off;
+
+% Visualizzazione dei cluster con minPts=2
+subplot(1,2,2);
+imshow(BW);
+hold on;
+title(['Clustering con minPts=2: ', num2str(num_clusters2), ' cluster']);
+
+for k = 1:length(all_lines)
+    if idx2(k) > 0  % Escludi punti rumore (-1)
+        cluster_color = colors2(idx2(k),:);
+        xy = [all_lines(k).point1; all_lines(k).point2];
+        plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', cluster_color);
+        % Visualizza i centroidi
+        plot(centroids(k,1), centroids(k,2), 'o', 'MarkerSize', 6, ...
+             'MarkerEdgeColor', cluster_color, 'MarkerFaceColor', cluster_color);
+    else
+        % Punti rumore in grigio
+        xy = [all_lines(k).point1; all_lines(k).point2];
+        plot(xy(:,1), xy(:,2), 'LineWidth', 1, 'Color', [0.7 0.7 0.7]);
+    end
+end
+hold off;
+
+% Visualizzazione dello spazio delle caratteristiche
+figure;
+subplot(1,2,1);
+scatter3(centroid_x_norm, centroid_y_norm, thetas_norm, 50, idx1, 'filled');
+title('Spazio delle caratteristiche (minPts=1)');
+xlabel('Centroide X (norm)');
+ylabel('Centroide Y (norm)');
+zlabel('Theta (norm)');
+colormap(jet);
+colorbar;
+
+subplot(1,2,2);
+scatter3(centroid_x_norm, centroid_y_norm, thetas_norm, 50, idx2, 'filled');
+title('Spazio delle caratteristiche (minPts=2)');
+xlabel('Centroide X (norm)');
+ylabel('Centroide Y (norm)');
+zlabel('Theta (norm)');
+colormap(jet);
+colorbar;
+
+% Calcolo statistiche intra-cluster per valutare la coerenza
+% Calcola statistiche per ogni cluster (deviazione standard delle caratteristiche)
+
+% Per minPts=1
+cluster_stats1 = struct('mean_theta', {}, 'std_theta', {}, 'mean_rho', {}, 'std_rho', {}, 'size', {});
+for i = 1:num_clusters1
+    cluster_idx = find(idx1 == i);
+    cluster_stats1(i).mean_theta = mean(thetas(cluster_idx));
+    cluster_stats1(i).std_theta = std(thetas(cluster_idx));
+    cluster_stats1(i).mean_rho = mean(rhos(cluster_idx));
+    cluster_stats1(i).std_rho = std(rhos(cluster_idx));
+    cluster_stats1(i).size = length(cluster_idx);
+end
+
+% Per minPts=2
+cluster_stats2 = struct('mean_theta', {}, 'std_theta', {}, 'mean_rho', {}, 'std_rho', {}, 'size', {});
+for i = 1:num_clusters2
+    cluster_idx = find(idx2 == i);
+    cluster_stats2(i).mean_theta = mean(thetas(cluster_idx));
+    cluster_stats2(i).std_theta = std(thetas(cluster_idx));
+    cluster_stats2(i).mean_rho = mean(rhos(cluster_idx));
+    cluster_stats2(i).std_rho = std(rhos(cluster_idx));
+    cluster_stats2(i).size = length(cluster_idx);
+end
+
+% Visualizza statistiche dei cluster
+fprintf('\nStatistiche dei cluster con minPts=1:\n');
+for i = 1:num_clusters1
+    fprintf('Cluster %d (size=%d): mean_theta=%.2f°, std_theta=%.2f°, mean_rho=%.2f, std_rho=%.2f\n', ...
+            i, cluster_stats1(i).size, cluster_stats1(i).mean_theta, cluster_stats1(i).std_theta, ...
+            cluster_stats1(i).mean_rho, cluster_stats1(i).std_rho);
+end
+
+fprintf('\nStatistiche dei cluster con minPts=2:\n');
+for i = 1:num_clusters2
+    fprintf('Cluster %d (size=%d): mean_theta=%.2f°, std_theta=%.2f°, mean_rho=%.2f, std_rho=%.2f\n', ...
+            i, cluster_stats2(i).size, cluster_stats2(i).mean_theta, cluster_stats2(i).std_theta, ...
+            cluster_stats2(i).mean_rho, cluster_stats2(i).std_rho);
+end
+
+% Calcola coerenza media dei cluster (media delle deviazioni standard normalizzate)
+% Un valore più basso indica cluster più coerenti
+if num_clusters1 > 0
+    std_thetas1 = arrayfun(@(x) x.std_theta, cluster_stats1);
+    std_rhos1 = arrayfun(@(x) x.std_rho, cluster_stats1);
+    cluster_sizes1 = arrayfun(@(x) x.size, cluster_stats1);
+    
+    % Media ponderata delle deviazioni standard
+    coherence1 = sum((std_thetas1 ./ max(thetas) + std_rhos1 ./ max(rhos)) .* cluster_sizes1) / sum(cluster_sizes1);
+    fprintf('\nCoerenza media dei cluster (minPts=1): %.4f (più basso è meglio)\n', coherence1);
+end
+
+if num_clusters2 > 0
+    std_thetas2 = arrayfun(@(x) x.std_theta, cluster_stats2);
+    std_rhos2 = arrayfun(@(x) x.std_rho, cluster_stats2);
+    cluster_sizes2 = arrayfun(@(x) x.size, cluster_stats2);
+    
+    % Media ponderata delle deviazioni standard
+    coherence2 = sum((std_thetas2 ./ max(thetas) + std_rhos2 ./ max(rhos)) .* cluster_sizes2) / sum(cluster_sizes2);
+    fprintf('Coerenza media dei cluster (minPts=2): %.4f (più basso è meglio)\n', coherence2);
+end
+
+% Plot finale dei cluster individuati con rappresentazione dell'immagine originale
+figure('Name', 'Confronto dei Cluster individuati', 'Position', [100, 100, 1200, 600]);
+
+% Subplot per minPts=1
+subplot(1, 2, 1);
+imshow(cropped_img); % Mostra l'immagine originale crop
+hold on;
+title(['Cluster individuati con minPts=1 (', num2str(num_clusters1), ' cluster)'], 'FontSize', 12);
+
+% Disegna ogni cluster con un colore diverso
+for i = 1:num_clusters1
+    cluster_lines = find(idx1 == i);
+    cluster_color = colors1(i,:);
+    
+    % Disegna tutte le linee appartenenti al cluster
+    for j = 1:length(cluster_lines)
+        line_idx = cluster_lines(j);
+        xy = [all_lines(line_idx).point1; all_lines(line_idx).point2];
+        plot(xy(:,1), xy(:,2), 'LineWidth', 3, 'Color', cluster_color);
+    end
+    
+    % Aggiungi un'etichetta per il cluster
+    cluster_center_x = mean(centroids(cluster_lines,1));
+    cluster_center_y = mean(centroids(cluster_lines,2));
+    text(cluster_center_x, cluster_center_y, num2str(i), ...
+         'FontSize', 14, 'FontWeight', 'bold', 'Color', 'white', ...
+         'BackgroundColor', cluster_color, 'HorizontalAlignment', 'center');
+end
+
+% Disegna i punti rumore in grigio
+noise_lines = find(idx1 == -1);
+for j = 1:length(noise_lines)
+    line_idx = noise_lines(j);
+    xy = [all_lines(line_idx).point1; all_lines(line_idx).point2];
+    plot(xy(:,1), xy(:,2), 'LineWidth', 1, 'Color', [0.7 0.7 0.7], 'LineStyle', '--');
+end
+hold off;
+
+% Subplot per minPts=2
+subplot(1, 2, 2);
+imshow(cropped_img); % Mostra l'immagine originale crop
+hold on;
+title(['Cluster individuati con minPts=2 (', num2str(num_clusters2), ' cluster)'], 'FontSize', 12);
+
+% Disegna ogni cluster con un colore diverso
+for i = 1:num_clusters2
+    cluster_lines = find(idx2 == i);
+    cluster_color = colors2(i,:);
+    
+    % Disegna tutte le linee appartenenti al cluster
+    for j = 1:length(cluster_lines)
+        line_idx = cluster_lines(j);
+        xy = [all_lines(line_idx).point1; all_lines(line_idx).point2];
+        plot(xy(:,1), xy(:,2), 'LineWidth', 3, 'Color', cluster_color);
+    end
+    
+    % Aggiungi un'etichetta per il cluster
+    cluster_center_x = mean(centroids(cluster_lines,1));
+    cluster_center_y = mean(centroids(cluster_lines,2));
+    text(cluster_center_x, cluster_center_y, num2str(i), ...
+         'FontSize', 14, 'FontWeight', 'bold', 'Color', 'white', ...
+         'BackgroundColor', cluster_color, 'HorizontalAlignment', 'center');
+end
+
+% Disegna i punti rumore in grigio
+noise_lines = find(idx2 == -1);
+for j = 1:length(noise_lines)
+    line_idx = noise_lines(j);
+    xy = [all_lines(line_idx).point1; all_lines(line_idx).point2];
+    plot(xy(:,1), xy(:,2), 'LineWidth', 1, 'Color', [0.7 0.7 0.7], 'LineStyle', '--');
+end
+hold off;
+
+%% Plot dei cluster nel piano theta-rho
+figure('Name', 'Rappresentazione dei Cluster nello spazio theta-rho', 'Position', [100, 100, 1200, 600]);
+
+% Subplot per minPts=1 nel piano theta-rho
+subplot(1, 2, 1);
+hold on;
+title(['Cluster in spazio theta-rho con minPts=1 (', num2str(num_clusters1), ' cluster)'], 'FontSize', 12);
+grid on;
+
+% Disegna ogni cluster con un colore diverso
+for i = 1:num_clusters1
+    cluster_points = find(idx1 == i);
+    cluster_color = colors1(i,:);
+    scatter(thetas(cluster_points), rhos(cluster_points), 100, 'filled', ...
+            'MarkerFaceColor', cluster_color, 'MarkerEdgeColor', 'black');
+    
+    % Aggiungi etichetta del cluster
+    cluster_center_theta = mean(thetas(cluster_points));
+    cluster_center_rho = mean(rhos(cluster_points));
+    text(cluster_center_theta, cluster_center_rho, num2str(i), ...
+         'FontSize', 14, 'FontWeight', 'bold', 'Color', 'black', ...
+         'HorizontalAlignment', 'center');
+end
+
+% Disegna i punti rumore in grigio
+noise_points = find(idx1 == -1);
+if ~isempty(noise_points)
+    scatter(thetas(noise_points), rhos(noise_points), 50, 'filled', ...
+            'MarkerFaceColor', [0.7 0.7 0.7], 'MarkerEdgeColor', 'black', 'Marker', 'x');
+end
+
+xlabel('\theta [gradi]', 'FontSize', 12);
+ylabel('\rho', 'FontSize', 12);
+hold off;
+
+% Subplot per minPts=2 nel piano theta-rho
+subplot(1, 2, 2);
+hold on;
+title(['Cluster in spazio theta-rho con minPts=2 (', num2str(num_clusters2), ' cluster)'], 'FontSize', 12);
+grid on;
+
+% Disegna ogni cluster con un colore diverso
+for i = 1:num_clusters2
+    cluster_points = find(idx2 == i);
+    cluster_color = colors2(i,:);
+    scatter(thetas(cluster_points), rhos(cluster_points), 100, 'filled', ...
+            'MarkerFaceColor', cluster_color, 'MarkerEdgeColor', 'black');
+    
+    % Aggiungi etichetta del cluster
+    cluster_center_theta = mean(thetas(cluster_points));
+    cluster_center_rho = mean(rhos(cluster_points));
+    text(cluster_center_theta, cluster_center_rho, num2str(i), ...
+         'FontSize', 14, 'FontWeight', 'bold', 'Color', 'black', ...
+         'HorizontalAlignment', 'center');
+end
+
+% Disegna i punti rumore in grigio
+noise_points = find(idx2 == -1);
+if ~isempty(noise_points)
+    scatter(thetas(noise_points), rhos(noise_points), 50, 'filled', ...
+            'MarkerFaceColor', [0.7 0.7 0.7], 'MarkerEdgeColor', 'black', 'Marker', 'x');
+end
+
+xlabel('\theta [gradi]', 'FontSize', 12);
+ylabel('\rho', 'FontSize', 12);
+hold off;
+
+
+% Visualization of clustered lines
+figure;
+imshow(BW);
+hold on;
+
+% Define a colormap for different clusters
+colors = hsv(max(idx));
+
+for k = 1:length(all_lines)
+    if idx(k) > 0 % Exclude noise points (-1)
+        xy = [all_lines(k).point1; all_lines(k).point2];
+        plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', colors(idx(k),:));
+        % Plot centroids
+        plot(centroids(k,1), centroids(k,2), 'o', 'MarkerSize', 8, ...
+             'MarkerEdgeColor', colors(idx(k),:), 'MarkerFaceColor', colors(idx(k),:));
+    end
+end
+
+title('Line Clusters based on Centroids and Parameters');
+hold off;
 
  %%
 
