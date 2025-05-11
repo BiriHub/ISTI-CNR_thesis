@@ -410,7 +410,7 @@ for i = 1:length(horizontal_lines)
     end
 end
 
-%% DEBUG
+% % DEBUG
 % % Crea una nuova figura
 % figure;
 % imshow(grayImg);
@@ -440,7 +440,7 @@ end
 
 % Optimize the size
 intersectionPoints = intersectionPoints(1:k-1, :);
-
+% 
 % % DEGUB
 % figure, imshow(grayImg), hold on;
 % 
@@ -472,16 +472,6 @@ freq_points = sortrows(intersectionPoints(idx,:));
 if size(freq_points,1) ~= 13
     throw(MException('sizeError:Error','The number of points is not sufficient'));
 end
-
-% % Create a vector of indices
-% indices = 1:size(freq_points,1);
-% 
-% % Keep points where index is odd OR index is == 2
-% keep_indices = mod(indices, 2) ~= 0 | indices == 2;
-% 
-% % Apply the filter to get the filtered freq_points
-% freq_points = freq_points(keep_indices, :);
-
 
 % Initialize array to store OCR results for the frequency axis
 freq_ocr_results = cell(size(freq_points,1), 1);
@@ -599,13 +589,7 @@ hold off;
 
 
 
-%% 
-% % Soluzion per trovare i cerchi nel grafico
-% [centers, radii, metric] = imfindcircles(grayImg,[6 6],"ObjectPolarity","dark");
-% 
-% figure;imshow(grayImg);
-% hold on;
-% viscircles(centers, radii,'EdgeColor','b');
+
 
 %% % FINAL PART
 close all;
@@ -614,44 +598,37 @@ x = max(refined_grid_points(1,1), refined_grid_points(3,1));
 y = max(refined_grid_points(1,2), refined_grid_points(2,2));
 cropped_img = imcrop (grayImg, [x,y,refined_grid_points(2,1)- x, refined_grid_points(3,2)-y]);
 
-% filtered_img=imtophat(cropped_img,strel("disk",5));
-% filtered_img = imopen (filtered_img,strel("square",3));
-
-% filtered_img = imadjust(cropped_img,[0.8 0.9],[0 1]);
 filtered_img = imadjust(cropped_img);
-
 
 % Apply the Canny operator to obtain the binary edge map
 BW = edge(filtered_img, 'Canny');
 
 BW = imdilate(BW, strel('line',3,0)) | imdilate(BW,strel('line',3,90));
 
-figure ; imshow(BW);
-
-BW = imdilate(BW, strel("rectangle", [2 3])); % square = 2 non va bene per alcune immagini con O
+BW = imdilate(BW, strel("rectangle",[2 6])); % square = 2 non va bene per alcune immagini con O
 % Da testare una via di mezzo che vadi bene per tutti, tipo un disk o
 % diamond
 
 % BW= bwmorph(BW,'skeleton');
 BW = bwskel(BW);
 
-figure ; imshow(BW);
-
-% threshold = ceil(0.5 * max(H(:))); % Soglia più bassa per includere picchi meno prominenti
 % nhood_size = floor(size(H)/25) * 2 + 1; % Dimensione dell'intorno più piccola
-
+figure ; imshow(BW);
 % Compute the Hough Transform
 [H, theta, rho] = hough(BW,'Theta',-85:-5);
 
-peaks = houghpeaks(H, 60,'Theta',-85:-5); % 40 for the maximum possible measurement case
+threshold = ceil(0.6 * max(H(:))); % Soglia più bassa per includere picchi meno prominenti
+
+peaks = houghpeaks(H, 60,'Theta',-85:-5,'Threshold',threshold); % 40 for the maximum possible measurement case
 % Extract the detected lines based on the found peaks
-lines1 = houghlines(BW, theta, rho, peaks,"MinLength",50,"FillGap",15);
+lines1 = houghlines(BW, theta, rho, peaks,"MinLength",50,"FillGap",20);
 
 [H, theta, rho] = hough(BW,'Theta',5:85);
+threshold = ceil(0.6 * max(H(:))); % Soglia più bassa per includere picchi meno prominenti
 
-peaks = houghpeaks(H, 60,'Theta',5:85);
+peaks = houghpeaks(H, 60,'Theta',5:85,'Threshold',threshold);
 % Extract the detected lines based on the found peaks
-lines2 = houghlines(BW, theta, rho, peaks,"MinLength",50,"FillGap",15);
+lines2 = houghlines(BW, theta, rho, peaks,"MinLength",50,"FillGap",20);
 
 % all_lines = [lines1 lines2];
 % % Calculate centroids for all detected lines
