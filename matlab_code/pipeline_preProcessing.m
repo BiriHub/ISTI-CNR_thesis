@@ -685,735 +685,133 @@ rhos_norm = (rhos - min(rhos)) / (max(rhos) - min(rhos));
 data_norm = [centroid_x_norm, centroid_y_norm, thetas_norm, rhos_norm];
 
 % Parametri per DBSCAN
-epsilon = 0.3; % Epsilon per dati normalizzati (0-1)
+epsilon = 0.25; % Epsilon per dati normalizzati (0-1)
 
 % Confronta diverse configurazioni di DBSCAN
 % Test con minPts = 1
-minPts1 = 1;
-idx1 = dbscan(data_norm, epsilon, minPts1);
-num_clusters1 = max(idx1);
+minPts = 1;
+idx1 = dbscan(data_norm, epsilon, minPts);
+num_clusters = max(idx1);
 noise_points1 = sum(idx1 == -1);
 
-% Test con minPts = 2
-minPts2 = 2;
-idx2 = dbscan(data_norm, epsilon, minPts2);
-num_clusters2 = max(idx2);
-noise_points2 = sum(idx2 == -1);
 
-% Calcola metriche di valutazione
-silhouette_scores = zeros(2, 1);
+% Find the optimal theta for each cluster
 
-% Silhouette score per minPts = 1 (se ci sono almeno 2 cluster)
-if num_clusters1 > 1
-    valid_points = idx1 ~= -1;
-    if sum(valid_points) > 0 && length(unique(idx1(valid_points))) > 1
-        try
-            silhouette_scores(1) = mean(silhouette(data_norm(valid_points,:), idx1(valid_points)));
-        catch
-            silhouette_scores(1) = NaN;
-            disp('Impossibile calcolare Silhouette per minPts=1');
-        end
+% Inizializza array per memorizzare theta ottimale per ogni cluster
+theta_ottimali = zeros(num_clusters, 1);
+rho_ottimali = zeros(num_clusters, 1);
+
+% Per ogni cluster, calcola il theta ottimale
+for i = 1:num_clusters
+    % Trova gli indici dei punti appartenenti al cluster i
+    cluster_indices = find(idx1 == i);
+    
+    % Estrai gli angoli theta per questo cluster
+    cluster_thetas = thetas(cluster_indices);
+    
+    % Calcola la media degli angoli (attenzione alla circolarità)
+    % Conversione a coordinate cartesiane per gestire correttamente la media circolare
+    x_sum = sum(cos(cluster_thetas));
+    y_sum = sum(sin(cluster_thetas));
+    
+    % Calcola l'angolo medio
+    theta_ottimali(i) = atan2(y_sum, x_sum);
+    
+    % Opzionale: calcola anche la distanza media (rho) per il cluster
+    cluster_rhos = rhos(cluster_indices);
+    rho_ottimali(i) = mean(cluster_rhos);
+    
+    % Visualizza la retta ottimale per questo cluster
+    % Ricava punti sulla retta usando la forma parametrica
+    x_line = cos(theta_ottimali(i)) * rho_ottimali(i) - 1000*sin(theta_ottimali(i)):sin(theta_ottimali(i)) * rho_ottimali(i) + 1000*cos(theta_ottimali(i));
+    y_line = sin(theta_ottimali(i)) * rho_ottimali(i) + 1000*cos(theta_ottimali(i)):(-cos(theta_ottimali(i)) * rho_ottimali(i) + 1000*sin(theta_ottimali(i)));
+    
+    % Converti la retta in forma y = mx + q per visualizzazione
+    if abs(sin(theta_ottimali(i))) > 1e-10  % Evita divisione per zero
+        m = -cos(theta_ottimali(i)) / sin(theta_ottimali(i));
+        q = rho_ottimali(i) / sin(theta_ottimali(i));
+        fprintf('Cluster %d: theta ottimale = %.2f rad, rho ottimale = %.2f, equazione retta: y = %.2fx + %.2f\n', ...
+            i, theta_ottimali(i), rho_ottimali(i), m, q);
     else
-        silhouette_scores(1) = NaN;
-    end
-else
-    silhouette_scores(1) = NaN;
-end
-
-% Silhouette score per minPts = 2 (se ci sono almeno 2 cluster)
-if num_clusters2 > 1
-    valid_points = idx2 ~= -1;
-    if sum(valid_points) > 0 && length(unique(idx2(valid_points))) > 1
-        try
-            silhouette_scores(2) = mean(silhouette(data_norm(valid_points,:), idx2(valid_points)));
-        catch
-            silhouette_scores(2) = NaN;
-            disp('Impossibile calcolare Silhouette per minPts=2');
-        end
-    else
-        silhouette_scores(2) = NaN;
-    end
-else
-    silhouette_scores(2) = NaN;
-end
-
-% Visualizza i risultati di confronto
-fprintf('Valutazione dei cluster:\n');
-fprintf('minPts=1: %d cluster, %d punti rumore, Silhouette=%.4f\n', ...
-        num_clusters1, noise_points1, silhouette_scores(1));
-fprintf('minPts=2: %d cluster, %d punti rumore, Silhouette=%.4f\n', ...
-        num_clusters2, noise_points2, silhouette_scores(2));
-
-% Davies-Bouldin Index (più basso è meglio)
-if num_clusters1 > 1
-    valid_points = idx1 ~= -1;
-    if sum(valid_points) > 0 && length(unique(idx1(valid_points))) > 1
-        try
-            db_index1 = evalclusters(data_norm(valid_points,:), idx1(valid_points), 'DaviesBouldin').CriterionValues;
-            fprintf('Davies-Bouldin Index (minPts=1): %.4f\n', db_index1);
-        catch
-            fprintf('Impossibile calcolare Davies-Bouldin per minPts=1\n');
-        end
+        % Retta verticale
+        fprintf('Cluster %d: theta ottimale = %.2f rad, rho ottimale = %.2f, equazione retta: x = %.2f\n', ...
+            i, theta_ottimali(i), rho_ottimali(i), rho_ottimali(i));
     end
 end
 
-if num_clusters2 > 1
-    valid_points = idx2 ~= -1;
-    if sum(valid_points) > 0 && length(unique(idx2(valid_points))) > 1
-        try
-            db_index2 = evalclusters(data_norm(valid_points,:), idx2(valid_points), 'DaviesBouldin').CriterionValues;
-            fprintf('Davies-Bouldin Index (minPts=2): %.4f\n', db_index2);
-        catch
-            fprintf('Impossibile calcolare Davies-Bouldin per minPts=2\n');
-        end
-    end
-end
-
-% Visualizzazione dei risultati di clustering
-
-% Impostazione colori per visualizzazione
-colors1 = hsv(num_clusters1);
-colors2 = hsv(num_clusters2);
-
-% Visualizzazione dei cluster con minPts=1
-figure;
-subplot(1,2,1);
-imshow(BW);
-hold on;
-title(['Clustering con minPts=1: ', num2str(num_clusters1), ' cluster']);
-
-for k = 1:length(all_lines)
-    if idx1(k) > 0  % Escludi punti rumore (-1)
-        cluster_color = colors1(idx1(k),:);
-        xy = [all_lines(k).point1; all_lines(k).point2];
-        plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', cluster_color);
-        % Visualizza i centroidi
-        plot(centroids(k,1), centroids(k,2), 'o', 'MarkerSize', 6, ...
-             'MarkerEdgeColor', cluster_color, 'MarkerFaceColor', cluster_color);
-    else
-        % Punti rumore in grigio
-        xy = [all_lines(k).point1; all_lines(k).point2];
-        plot(xy(:,1), xy(:,2), 'LineWidth', 1, 'Color', [0.7 0.7 0.7]);
-    end
-end
-hold off;
-
-% Visualizzazione dei cluster con minPts=2
-subplot(1,2,2);
-imshow(BW);
-hold on;
-title(['Clustering con minPts=2: ', num2str(num_clusters2), ' cluster']);
-
-for k = 1:length(all_lines)
-    if idx2(k) > 0  % Escludi punti rumore (-1)
-        cluster_color = colors2(idx2(k),:);
-        xy = [all_lines(k).point1; all_lines(k).point2];
-        plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', cluster_color);
-        % Visualizza i centroidi
-        plot(centroids(k,1), centroids(k,2), 'o', 'MarkerSize', 6, ...
-             'MarkerEdgeColor', cluster_color, 'MarkerFaceColor', cluster_color);
-    else
-        % Punti rumore in grigio
-        xy = [all_lines(k).point1; all_lines(k).point2];
-        plot(xy(:,1), xy(:,2), 'LineWidth', 1, 'Color', [0.7 0.7 0.7]);
-    end
-end
-hold off;
-
-% Visualizzazione dello spazio delle caratteristiche
-figure;
-subplot(1,2,1);
-scatter3(centroid_x_norm, centroid_y_norm, thetas_norm, 50, idx1, 'filled');
-title('Spazio delle caratteristiche (minPts=1)');
-xlabel('Centroide X (norm)');
-ylabel('Centroide Y (norm)');
-zlabel('Theta (norm)');
-colormap(jet);
-colorbar;
-
-subplot(1,2,2);
-scatter3(centroid_x_norm, centroid_y_norm, thetas_norm, 50, idx2, 'filled');
-title('Spazio delle caratteristiche (minPts=2)');
-xlabel('Centroide X (norm)');
-ylabel('Centroide Y (norm)');
-zlabel('Theta (norm)');
-colormap(jet);
-colorbar;
-
-% Calcolo statistiche intra-cluster per valutare la coerenza
-% Calcola statistiche per ogni cluster (deviazione standard delle caratteristiche)
-
-% Per minPts=1
-cluster_stats1 = struct('mean_theta', {}, 'std_theta', {}, 'mean_rho', {}, 'std_rho', {}, 'size', {});
-for i = 1:num_clusters1
-    cluster_idx = find(idx1 == i);
-    cluster_stats1(i).mean_theta = mean(thetas(cluster_idx));
-    cluster_stats1(i).std_theta = std(thetas(cluster_idx));
-    cluster_stats1(i).mean_rho = mean(rhos(cluster_idx));
-    cluster_stats1(i).std_rho = std(rhos(cluster_idx));
-    cluster_stats1(i).size = length(cluster_idx);
-end
-
-% Per minPts=2
-cluster_stats2 = struct('mean_theta', {}, 'std_theta', {}, 'mean_rho', {}, 'std_rho', {}, 'size', {});
-for i = 1:num_clusters2
-    cluster_idx = find(idx2 == i);
-    cluster_stats2(i).mean_theta = mean(thetas(cluster_idx));
-    cluster_stats2(i).std_theta = std(thetas(cluster_idx));
-    cluster_stats2(i).mean_rho = mean(rhos(cluster_idx));
-    cluster_stats2(i).std_rho = std(rhos(cluster_idx));
-    cluster_stats2(i).size = length(cluster_idx);
-end
-
-% Visualizza statistiche dei cluster
-fprintf('\nStatistiche dei cluster con minPts=1:\n');
-for i = 1:num_clusters1
-    fprintf('Cluster %d (size=%d): mean_theta=%.2f°, std_theta=%.2f°, mean_rho=%.2f, std_rho=%.2f\n', ...
-            i, cluster_stats1(i).size, cluster_stats1(i).mean_theta, cluster_stats1(i).std_theta, ...
-            cluster_stats1(i).mean_rho, cluster_stats1(i).std_rho);
-end
-
-fprintf('\nStatistiche dei cluster con minPts=2:\n');
-for i = 1:num_clusters2
-    fprintf('Cluster %d (size=%d): mean_theta=%.2f°, std_theta=%.2f°, mean_rho=%.2f, std_rho=%.2f\n', ...
-            i, cluster_stats2(i).size, cluster_stats2(i).mean_theta, cluster_stats2(i).std_theta, ...
-            cluster_stats2(i).mean_rho, cluster_stats2(i).std_rho);
-end
-
-% Calcola coerenza media dei cluster (media delle deviazioni standard normalizzate)
-% Un valore più basso indica cluster più coerenti
-if num_clusters1 > 0
-    std_thetas1 = arrayfun(@(x) x.std_theta, cluster_stats1);
-    std_rhos1 = arrayfun(@(x) x.std_rho, cluster_stats1);
-    cluster_sizes1 = arrayfun(@(x) x.size, cluster_stats1);
-    
-    % Media ponderata delle deviazioni standard
-    coherence1 = sum((std_thetas1 ./ max(thetas) + std_rhos1 ./ max(rhos)) .* cluster_sizes1) / sum(cluster_sizes1);
-    fprintf('\nCoerenza media dei cluster (minPts=1): %.4f (più basso è meglio)\n', coherence1);
-end
-
-if num_clusters2 > 0
-    std_thetas2 = arrayfun(@(x) x.std_theta, cluster_stats2);
-    std_rhos2 = arrayfun(@(x) x.std_rho, cluster_stats2);
-    cluster_sizes2 = arrayfun(@(x) x.size, cluster_stats2);
-    
-    % Media ponderata delle deviazioni standard
-    coherence2 = sum((std_thetas2 ./ max(thetas) + std_rhos2 ./ max(rhos)) .* cluster_sizes2) / sum(cluster_sizes2);
-    fprintf('Coerenza media dei cluster (minPts=2): %.4f (più basso è meglio)\n', coherence2);
-end
-
-% Plot finale dei cluster individuati con rappresentazione dell'immagine originale
-figure('Name', 'Confronto dei Cluster individuati', 'Position', [100, 100, 1200, 600]);
-
-% Subplot per minPts=1
-subplot(1, 2, 1);
-imshow(cropped_img); % Mostra l'immagine originale crop
-hold on;
-title(['Cluster individuati con minPts=1 (', num2str(num_clusters1), ' cluster)'], 'FontSize', 12);
-
-% Disegna ogni cluster con un colore diverso
-for i = 1:num_clusters1
-    cluster_lines = find(idx1 == i);
-    cluster_color = colors1(i,:);
-    
-    % Disegna tutte le linee appartenenti al cluster
-    for j = 1:length(cluster_lines)
-        line_idx = cluster_lines(j);
-        xy = [all_lines(line_idx).point1; all_lines(line_idx).point2];
-        plot(xy(:,1), xy(:,2), 'LineWidth', 3, 'Color', cluster_color);
-    end
-    
-    % Aggiungi un'etichetta per il cluster
-    cluster_center_x = mean(centroids(cluster_lines,1));
-    cluster_center_y = mean(centroids(cluster_lines,2));
-    text(cluster_center_x, cluster_center_y, num2str(i), ...
-         'FontSize', 14, 'FontWeight', 'bold', 'Color', 'white', ...
-         'BackgroundColor', cluster_color, 'HorizontalAlignment', 'center');
-end
-
-% Disegna i punti rumore in grigio
-noise_lines = find(idx1 == -1);
-for j = 1:length(noise_lines)
-    line_idx = noise_lines(j);
-    xy = [all_lines(line_idx).point1; all_lines(line_idx).point2];
-    plot(xy(:,1), xy(:,2), 'LineWidth', 1, 'Color', [0.7 0.7 0.7], 'LineStyle', '--');
-end
-hold off;
-
-% Subplot per minPts=2
-subplot(1, 2, 2);
-imshow(cropped_img); % Mostra l'immagine originale crop
-hold on;
-title(['Cluster individuati con minPts=2 (', num2str(num_clusters2), ' cluster)'], 'FontSize', 12);
-
-% Disegna ogni cluster con un colore diverso
-for i = 1:num_clusters2
-    cluster_lines = find(idx2 == i);
-    cluster_color = colors2(i,:);
-    
-    % Disegna tutte le linee appartenenti al cluster
-    for j = 1:length(cluster_lines)
-        line_idx = cluster_lines(j);
-        xy = [all_lines(line_idx).point1; all_lines(line_idx).point2];
-        plot(xy(:,1), xy(:,2), 'LineWidth', 3, 'Color', cluster_color);
-    end
-    
-    % Aggiungi un'etichetta per il cluster
-    cluster_center_x = mean(centroids(cluster_lines,1));
-    cluster_center_y = mean(centroids(cluster_lines,2));
-    text(cluster_center_x, cluster_center_y, num2str(i), ...
-         'FontSize', 14, 'FontWeight', 'bold', 'Color', 'white', ...
-         'BackgroundColor', cluster_color, 'HorizontalAlignment', 'center');
-end
-
-% Disegna i punti rumore in grigio
-noise_lines = find(idx2 == -1);
-for j = 1:length(noise_lines)
-    line_idx = noise_lines(j);
-    xy = [all_lines(line_idx).point1; all_lines(line_idx).point2];
-    plot(xy(:,1), xy(:,2), 'LineWidth', 1, 'Color', [0.7 0.7 0.7], 'LineStyle', '--');
-end
-hold off;
-
-%% Plot dei cluster nel piano theta-rho
-figure('Name', 'Rappresentazione dei Cluster nello spazio theta-rho', 'Position', [100, 100, 1200, 600]);
-
-% Subplot per minPts=1 nel piano theta-rho
-subplot(1, 2, 1);
-hold on;
-title(['Cluster in spazio theta-rho con minPts=1 (', num2str(num_clusters1), ' cluster)'], 'FontSize', 12);
-grid on;
-
-% Disegna ogni cluster con un colore diverso
-for i = 1:num_clusters1
-    cluster_points = find(idx1 == i);
-    cluster_color = colors1(i,:);
-    scatter(thetas(cluster_points), rhos(cluster_points), 100, 'filled', ...
-            'MarkerFaceColor', cluster_color, 'MarkerEdgeColor', 'black');
-    
-    % Aggiungi etichetta del cluster
-    cluster_center_theta = mean(thetas(cluster_points));
-    cluster_center_rho = mean(rhos(cluster_points));
-    text(cluster_center_theta, cluster_center_rho, num2str(i), ...
-         'FontSize', 14, 'FontWeight', 'bold', 'Color', 'black', ...
-         'HorizontalAlignment', 'center');
-end
-
-% Disegna i punti rumore in grigio
-noise_points = find(idx1 == -1);
-if ~isempty(noise_points)
-    scatter(thetas(noise_points), rhos(noise_points), 50, 'filled', ...
-            'MarkerFaceColor', [0.7 0.7 0.7], 'MarkerEdgeColor', 'black', 'Marker', 'x');
-end
-
-xlabel('\theta [gradi]', 'FontSize', 12);
-ylabel('\rho', 'FontSize', 12);
-hold off;
-
-% Subplot per minPts=2 nel piano theta-rho
-subplot(1, 2, 2);
-hold on;
-title(['Cluster in spazio theta-rho con minPts=2 (', num2str(num_clusters2), ' cluster)'], 'FontSize', 12);
-grid on;
-
-% Disegna ogni cluster con un colore diverso
-for i = 1:num_clusters2
-    cluster_points = find(idx2 == i);
-    cluster_color = colors2(i,:);
-    scatter(thetas(cluster_points), rhos(cluster_points), 100, 'filled', ...
-            'MarkerFaceColor', cluster_color, 'MarkerEdgeColor', 'black');
-    
-    % Aggiungi etichetta del cluster
-    cluster_center_theta = mean(thetas(cluster_points));
-    cluster_center_rho = mean(rhos(cluster_points));
-    text(cluster_center_theta, cluster_center_rho, num2str(i), ...
-         'FontSize', 14, 'FontWeight', 'bold', 'Color', 'black', ...
-         'HorizontalAlignment', 'center');
-end
-
-% Disegna i punti rumore in grigio
-noise_points = find(idx2 == -1);
-if ~isempty(noise_points)
-    scatter(thetas(noise_points), rhos(noise_points), 50, 'filled', ...
-            'MarkerFaceColor', [0.7 0.7 0.7], 'MarkerEdgeColor', 'black', 'Marker', 'x');
-end
-
-xlabel('\theta [gradi]', 'FontSize', 12);
-ylabel('\rho', 'FontSize', 12);
-hold off;
 
 
-% Visualization of clustered lines
+
+
+% Plot the binary image first
 figure;
 imshow(BW);
 hold on;
 
 % Define a colormap for different clusters
-colors = hsv(max(idx));
+% Exclude the first color (reserved for noise points)
+colors = hsv(num_clusters + 1);
+cluster_colors = colors(2:end, :);
+noise_color = [0.5 0.5 0.5]; % Gray for noise points
 
-for k = 1:length(all_lines)
-    if idx(k) > 0 % Exclude noise points (-1)
-        xy = [all_lines(k).point1; all_lines(k).point2];
-        plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', colors(idx(k),:));
-        % Plot centroids
-        plot(centroids(k,1), centroids(k,2), 'o', 'MarkerSize', 8, ...
-             'MarkerEdgeColor', colors(idx(k),:), 'MarkerFaceColor', colors(idx(k),:));
+% Loop through each cluster and plot points with corresponding lines
+for cluster_id = 1:num_clusters
+    % Find indices of points in current cluster
+    cluster_points = find(idx1 == cluster_id);
+    
+    % Plot centroids of current cluster
+    scatter(centroids(cluster_points, 1), centroids(cluster_points, 2), 30, ...
+            'MarkerFaceColor', cluster_colors(cluster_id,:), ...
+            'MarkerEdgeColor', 'k', ...
+            'LineWidth', 0.5, ...
+            'Marker', 'o');
+    
+    % Plot lines of current cluster
+    for i = 1:length(cluster_points)
+        line_idx = cluster_points(i);
+        pt1 = all_lines(line_idx).point1;
+        pt2 = all_lines(line_idx).point2;
+        
+        % Draw the line with same color as the cluster
+        line([pt1(1), pt2(1)], [pt1(2), pt2(2)], ...
+             'Color', cluster_colors(cluster_id,:), ...
+             'LineWidth', 2);
     end
 end
 
-title('Line Clusters based on Centroids and Parameters');
+% Plot noise points (idx1 == -1) and their lines if any
+noise_points = find(idx1 == -1);
+if ~isempty(noise_points)
+    % Plot noise centroids
+    scatter(centroids(noise_points, 1), centroids(noise_points, 2), 30, ...
+            'MarkerFaceColor', noise_color, ...
+            'MarkerEdgeColor', 'k', ...
+            'LineWidth', 0.5, ...
+            'Marker', 'x');
+    
+    % Plot noise lines
+    for i = 1:length(noise_points)
+        line_idx = noise_points(i);
+        pt1 = all_lines(line_idx).point1;
+        pt2 = all_lines(line_idx).point2;
+        
+        % Draw the line with noise color
+        line([pt1(1), pt2(1)], [pt1(2), pt2(2)], ...
+             'Color', noise_color, ...
+             'LineWidth', 1, ...
+             'LineStyle', '--');  % Dashed line for noise
+    end
+end
+
+% Add a title and legend
+title('DBSCAN Clustering Results with Lines on Binary Image');
+
+
 hold off;
 
- %%
+% Soluzion per trovare i cerchi nel grafico
+[centers, radii, metric] = imfindcircles(BW,[6 20],"ObjectPolarity","bright","Method","TwoStage");
 
-% %% 
-% % 1. Caricamento e preprocessing
-% close all;
-% % 1) Soglia e crea la maschera logica
-% BW = bwareaopen(BW, 10); % rimuove piccoli "punti" di area < 5 px (opzionale)
-% % BW = imdilate(BW, strel("disk",6));
-% BW = bwskel(BW);
-% 
-% BW = BW & ~bwmorph(BW,'branchpoints');
-% BW = bwmorph(BW,'spur');
-% 
-% figure; imshow(BW);
-% 
-% % 2) Calcolo delle proprietà dei blob originali
-% original_stats = regionprops(BW, 'Centroid', 'Area', 'Orientation', "ConvexHull", "Eccentricity", "Solidity", "Circularity", "ConvexArea");
-% 
-% % Estrai tutti i valori di ConvexArea
-% convexAreas = [original_stats.ConvexArea];
-% 
-% % Trova gli indici di quelli che sono almeno 10, exclude 
-% valid_idx = convexAreas < 10;
-% 
-% % Costruisci un nuovo array di struct con solo i blob validi
-% filtered_stats = original_stats(valid_idx);
-% 
-% filtered_centroids = cat(1, filtered_stats.Centroid);
-% 
-% % Visualizza
-% figure;
-% imshow(BW, []), hold on
-% plot(filtered_centroids(:,1), filtered_centroids(:,2), 'go', ...
-%      'MarkerSize', 10, 'LineWidth', 1.5)
-% hold off
-% title('Centroidi con ConvexArea >= 10');
-% 
-% % Centroidi in Nx2
-% C = filtered_centroids;  
-% 
-% % Parametri di DBSCAN
-% epsilon = 30;   % raggio di vicinanza
-% minPts  = 2;    % numero minimo di punti per considerare un cluster
-% 
-% % clusterIdx: 1,2,3,... per i cluster; -1 per i rumori (punti isolati)
-% [clusterIdx,corepts] = dbscan(C, epsilon, minPts);
-% 
-% % Trova i cluster numerati (escludendo il rumore = -1)
-% uc = unique(clusterIdx);
-% uc(uc==-1) = [];
-% nClusters = numel(uc);
-% 
-% 
-% % Dopo aver eseguito DBSCAN e identificato i cluster
-% figure; imshow(BW, []); hold on
-% 
-% % Prepara una mappa di colori
-% colors = lines(nClusters);
-% 
-% % Inizializza un array per memorizzare i centroidi dei cluster
-% cluster_centroids = zeros(nClusters, 2);
-% 
-% % Plot dei cluster e calcolo dei loro centroidi
-% for i = 1:nClusters
-%     k = uc(i);
-%     pts = C(clusterIdx==k, :);
-% 
-%     % Calcola il centroide del cluster come media dei punti
-%     cluster_centroid = mean(pts, 1);
-%     cluster_centroids(i,:) = cluster_centroid;
-% 
-%     % Plot dei punti del cluster
-%     plot(pts(:,1), pts(:,2),  'o', ...
-% 'MarkerSize', 10, 'LineWidth', 1.5);
-% 
-%     % Plot del centroide del cluster con un marker diverso e più grande
-%     plot(cluster_centroid(1), cluster_centroid(2), 'yo', ...
-% 'MarkerSize', 10, 'LineWidth', 1.5);
-% end
-% 
-% 
-% title('Distribuzione dei centroidi per cluster con centroidi dei cluster')
-% hold off
-% 
-% figure; imshow(cropped_img); hold on; 
-% plot(cluster_centroids(:,1), cluster_centroids(:,2), 'yo', ...
-% 'MarkerSize', 10, 'LineWidth', 1.5);
-% hold off;
-
-
-%%
-
-
-
-
-% 
-% % 7) Visualizza solo i ConvexHull filtrati
-% figure;
-% imshow(BW);
-% hold on;
-% for k = valid_hulls
-%     hull = hull_stats(k).ConvexHull;
-%     plot(hull(:,1), hull(:,2), 'g-', 'LineWidth', 2);
-%     patch(hull(:,1), hull(:,2), 'g', 'FaceAlpha', 0.3, 'EdgeColor', 'none');
-% 
-%     % Mostra anche i centroidi dei ConvexHull validi
-%     plot(hull_stats(k).Centroid(1), hull_stats(k).Centroid(2), 'r+', 'MarkerSize', 10, 'LineWidth', 2);
-% 
-%     % Etichetta ogni ConvexHull
-%     text(hull_stats(k).Centroid(1), hull_stats(k).Centroid(2) + 15, ...
-%         sprintf('%d', k), 'Color', 'y', 'FontSize', 12, 'FontWeight', 'bold', ...
-%         'HorizontalAlignment', 'center');
-% end
-% hold off;
-% title('ConvexHull filtrati per Eccentricità, Circolarità e Area');
-% 
-% % 8) Stampa le proprietà dei ConvexHull validi
-% fprintf('Proprietà dei ConvexHull validi:\n');
-% fprintf('ID\tArea\tConvexArea\tSolidity\tEccentricity\tCircularity\tOrientation\n');
-% fprintf('--\t----\t----------\t--------\t-----------\t-----------\t----------\n');
-% for k = valid_hulls
-%     fprintf('%d\t%.1f\t%.1f\t\t%.3f\t\t%.3f\t\t%.3f\t\t%.1f\n', ...
-%         k, hull_stats(k).Area, hull_stats(k).ConvexArea, hull_stats(k).Solidity, ...
-%         hull_stats(k).Eccentricity, hull_stats(k).Circularity, hull_stats(k).Orientation);
-% end
-% 
-% % 9) Crea una maschera finale che include solo le regioni ConvexHull valide
-% final_mask = false(size(BW));
-% for k = valid_hulls
-%     hull = hull_stats(k).ConvexHull;
-%     hull_poly = polyshape(hull(:,1), hull(:,2));
-%     [y, x] = meshgrid(1:size(BW,2), 1:size(BW,1));
-%     in_poly = isinterior(hull_poly, y(:), x(:));
-%     final_mask(in_poly) = true;
-% end
-% 
-% % Visualizza la maschera finale
-% figure;
-% imshow(final_mask);
-% title('Maschera finale con solo i ConvexHull validi');
-% 
-% % Opzionale: applica la maschera finale all'immagine originale per isolare le regioni di interesse
-% filtered_result = BW & final_mask;
-% figure;
-% imshow(filtered_result);
-% title('Risultato finale: solo le regioni di interesse');
-
-%%
-%  % 1) Estrai i punti dell'immagine originale che appartengono alle regioni valide
-% [filtered_y, filtered_x] = find(BW & final_mask);
-% filtered_points = [filtered_x, filtered_y];  % Matrice Nx2 di coordinate [x,y]
-% 
-% % 2) Applica K-means solo a questi punti filtrati
-% k = 8;  % Numero di cluster desiderato - modificalo in base alle tue esigenze
-% [idxK, C_kmeans] = kmeans(filtered_points, k, 'Replicates', 5, 'Distance', 'sqeuclidean');
-% 
-% % 3) Visualizza i risultati
-% figure;
-% imshow(filtered_img, []);
-% hold on;
-% 
-% % Centroidi originali (prima del filtro) - in giallo
-% plot(centroids(:,1), centroids(:,2), 'yo', 'MarkerSize', 6, 'LineWidth', 1);
-% 
-% % ConvexHull validi - in verde trasparente
-% for i = valid_hulls
-%     hull = hull_stats(i).ConvexHull;
-%     patch(hull(:,1), hull(:,2), 'g', 'FaceAlpha', 0.2, 'EdgeColor', 'g', 'LineWidth', 1);
-% end
-% 
-% % Centri dei cluster K-means - in rosso
-% plot(C_kmeans(:,1), C_kmeans(:,2), 'r*', 'MarkerSize', 12, 'LineWidth', 2);
-% 
-% % % 4) Visualizza i punti colorati in base al cluster a cui appartengono
-% % colors = hsv(k);  % Genera una palette di colori per i cluster
-% % for i = 1:k
-% %     cluster_points = filtered_points(idxK == i, :);
-% %     plot(cluster_points(:,1), cluster_points(:,2), '.', 'Color', colors(i,:), 'MarkerSize', 10);
-% % 
-% %     % Opzionale: aggiungi etichette ai centri dei cluster
-% %     text(C_kmeans(i,1), C_kmeans(i,2) - 15, sprintf('C%d', i), ...
-% %         'Color', 'white', 'FontSize', 10, 'FontWeight', 'bold', ...
-% %         'HorizontalAlignment', 'center', 'BackgroundColor', [0 0 0 0.5]);
-% % end
-% 
-% hold off;
-% title('K-means applicato alle regioni filtrate');
-
-
-
-% k = 8;  % esempio: tre gruppi; modificalo o calcolalo dinamicamente
-%     [idxK, C_kmeans] = kmeans(centroids, k, ...
-%                               'Replicates', 5, ...
-%                               'Distance',   'sqeuclidean');
-
-% % 7) Rimuovo i centroidi troppo isolati
-% D = pdist2(centroids, centroids);      % matrice distanze
-% D(1:size(D,1)+1:end) = inf;           % ignoro distanza zero su diagonale
-% minDist = min(D, [], 2);              % distanza al vicino più prossimo
-% 
-% dThresh = 15;                         % soglia in pixel (regola a piacere)
-% keepIdx = minDist > dThresh;         % true per i centroidi >vicini” ad almeno un altro
-% filteredC = centroids(keepIdx, :);
-% 
-% % 8) Raggruppamento via k-means
-% % (scegli k in base a quante regioni ti aspetti o in funzione di filteredC)
-% if size(filteredC,1) > 1
-%     k = 8;  % esempio: tre gruppi; modificalo o calcolalo dinamicamente
-%     [idxK, C_kmeans] = kmeans(filteredC, k, ...
-%                               'Replicates', 5, ...
-%                               'Distance',   'sqeuclidean');
-% else
-%     C_kmeans = filteredC;  % troppo pochi punti: nessun clustering
-% end
-
-% % 9) Visualizzo tutti i passi
-% figure; imshow(filtered_img, []); hold on
-% 
-%   % centroidi iniziali (prima del filtro) – in giallo
-%   plot(centroids(:,1), centroids(:,2), ...
-%        'yo', 'MarkerSize', 6, 'LineWidth', 1)
-% 
-%   % centroidi “vicini” sopravvissuti al filtro – in blu
-%   % plot(filteredC(:,1), filteredC(:,2), ...
-%   %      'bs', 'MarkerSize', 8, 'LineWidth', 1.5)
-% 
-%   % centri finali dei cluster k-means – in verde
-%   plot(C_kmeans(:,1), C_kmeans(:,2), ...
-%        'g*', 'MarkerSize', 12, 'LineWidth', 2)
-% hold off
-% title('pixel>40 (rosso), tutti i centroidi (giallo), filtrati (blu), kmeans (verde)');
-
-
-
-
-% %% ALTRO APPROCCIo FUNZIONANTE, DA MIGLIORARE MA OK
-% % Optimal approach for X exams
-%  close all;
-% [centers, radii, metric] = imfindcircles(BW, [10 40], ...
-%     'Sensitivity', 0.95, 'ObjectPolarity', 'bright',"Method","TwoStage");
-% k = 8; 
-% [idxK, C_kmeans] = kmeans(centers, k, ...
-%                               'Replicates', 5, ...
-%                               'Distance',   'sqeuclidean');
-% 
-% 
-% % % TODO: Optimal approach for O exams
-% % [centers, radii, metric] = imfindcircles(filtered_img, [10 40], ...
-% %     'Sensitivity', 0.95, 'ObjectPolarity', 'dark');
-% % k = 7; 
-% % [idxK, C_kmeans] = kmeans(centers, k, ...
-% %                               'Replicates', 5, ...
-% %                               'Distance',   'sqeuclidean');
-% 
-% 
-% 
-% % 3. Visualizzo
-% figure;
-% imshow(filtered_img,[]), hold on
-% viscircles(centers, radii,'EdgeColor','y');
-% % plot(centers(:,1), centers(:,2), 'r+');
-%  % centri finali dei cluster k-means – in verde
-%   plot(C_kmeans(:,1), C_kmeans(:,2), ...
-%        'g*', 'MarkerSize', 12, 'LineWidth', 2)
-% 
-% % Numero di cerchi trovati
-% N = size(centers, 1);
-% 
-% % 2. Preparo i rettangoli [x y w h] e croppo i patch
-% rects = zeros(N, 4);
-% patches = cell(N, 1);
-% variances = zeros(N, 1);
-% for i = 1:N
-%     xC = centers(i, 1);
-%     yC = centers(i, 2);
-%     r = radii(i);
-%     % Rettangolo centrato sul cerchio
-%     x = round(xC - r);
-%     y = round(yC - r);
-%     w = round(2*r);
-%     h = round(2*r);
-%     rects(i, :) = [x, y, w, h];
-%     patches{i} = imcrop(filtered_img, rects(i, :));
-%     % Calcola la varianza del patch
-%     variances(i) = var(double(patches{i}(:)));
-% 
-%     % Colora il rettangolo in base alla varianza (rosso = alta varianza)
-%     rectangle('Position', rects(i,:), 'EdgeColor', 'r', 'LineWidth', 2);
-% 
-% 
-% end
-%  hold off;
-% 
-% % 4. Filtro i cerchi in base alla varianza
-% % Determina una soglia di varianza per distinguere aree di interesse
-% threshold = mean(variances); % Puoi aggiustare questo valore
-% valid_idx = variances < threshold;
-% 
-% % Visualizza solo i cerchi validi
-% figure;
-% imshow(filtered_img);
-% hold on;
-% viscircles(centers(valid_idx,:), radii(valid_idx), 'EdgeColor', 'g');
-% title('Cerchi selezionati dopo filtro varianza');
-% hold off;
-% 
-% % Estrai i centroidi finali
-% final_centers = centers(valid_idx,:);
-
-% T = adaptthresh(filtered_img, 0.95, 'ForegroundPolarity','dark');
-% BW = imbinarize(filtered_img, T);
-% % 2. Pulisci con apertura
-% 
-% % filtered_img=imdilate(BW,strel("square",2 ));
-% 
-% se = strel('square',2);
-% filtered_img = imopen(filtered_img, se);
-
-
-% filtered_img = imcomplement(filtered_img);
-% filtered_img = edge(filtered_img, 'Canny',[0.12 0.15]);
-% 
-% filtered_img=imdilate(filtered_img,strel("square",2 ));
-
-% filtered_img = imerode(filtered_img,strel("diamond",4));
-
-% filled_img = imfill(filtered_img, 'holes');
-
-% filtered_img = imclose (filtered_img,strel("disk",5));
-
-
-% filtered_img = bwareaopen (filtered_img,15);
-
-
-
-% stats = regionprops(filtered_img, 'Centroid', 'Area');
-% areas = [stats.Area];
-% valid_idx = find(areas > 100 & areas < 200); % Esclude rumore e sfondo
-% centroids = vertcat(stats(valid_idx).Centroid);
-% hold on;
-% % plot(centroids(:,1), centroids(:,2), 'r+', 'MarkerSize', 20, 'LineWidth', 2);
-% title('Centroidi delle aree rilevate', 'FontSize', 14);
-
-
-% 
-% %% 2. Binarizzazione e pulizia
-% % Binarizza l'immagine (soglia adattiva)
-% % binary_img = imcomplement(bin_img); % Inverti se le "X" sono scure
-% 
-% % Operazioni morfologiche
-% cleaned_img = bwareaopen(bin_img, 30); % Rimuovi oggetti <30 pixel
-% se = strel('disk', 2);
-% cleaned_img = imdilate(cleaned_img, se); % Rafforza le forme
+figure;imshow(BW);
+hold on;
+viscircles(centers, radii,'EdgeColor','b');
