@@ -441,24 +441,24 @@ end
 % Optimize the size
 intersectionPoints = intersectionPoints(1:k-1, :);
 % 
-% % DEGUB
-% figure, imshow(grayImg), hold on;
-% 
-% plot(intersectionPoints(:,1), intersectionPoints(:,2), 'ro', 'MarkerSize', 4, 'LineWidth', 1);
-% 
-% title('Grid intersection points');
-% 
-% 
-% for i = 1:length(grid_corner_lines)
-%     % Punto 1 della linea
-%     x_pt1 = grid_corner_lines(i).point1(1);
-%     y_pt1 = grid_corner_lines(i).point1(2);
-%     plot(x_pt1, y_pt1, 'bs', 'MarkerSize', 4, 'LineWidth', 1);    
-%     % Punto 2 della linea
-%     x_pt2 = grid_corner_lines(i).point2(1);
-%     y_pt2 = grid_corner_lines(i).point2(2);
-%     plot(x_pt2, y_pt2, 'bs', 'MarkerSize', 4, 'LineWidth', 1);
-% end
+% DEGUB
+figure, imshow(grayImg), hold on;
+
+plot(intersectionPoints(:,1), intersectionPoints(:,2), 'ro', 'MarkerSize', 4, 'LineWidth', 1);
+
+title('Grid intersection points');
+
+
+for i = 1:length(grid_corner_lines)
+    % Punto 1 della linea
+    x_pt1 = grid_corner_lines(i).point1(1);
+    y_pt1 = grid_corner_lines(i).point1(2);
+    plot(x_pt1, y_pt1, 'bs', 'MarkerSize', 4, 'LineWidth', 1);    
+    % Punto 2 della linea
+    x_pt2 = grid_corner_lines(i).point2(1);
+    y_pt2 = grid_corner_lines(i).point2(2);
+    plot(x_pt2, y_pt2, 'bs', 'MarkerSize', 4, 'LineWidth', 1);
+end
 
 %% OCR IMPROVEMENT
 
@@ -592,6 +592,7 @@ hold off;
 
 
 %% % FINAL PART
+% 1. Extract information with Hough
 close all;
 
 x = max(refined_grid_points(1,1), refined_grid_points(3,1));
@@ -605,9 +606,7 @@ BW = edge(filtered_img, 'Canny');
 
 BW = imdilate(BW, strel('line',3,0)) | imdilate(BW,strel('line',3,90));
 
-BW = imdilate(BW, strel("rectangle",[2 6])); % square = 2 non va bene per alcune immagini con O
-% Da testare una via di mezzo che vadi bene per tutti, tipo un disk o
-% diamond
+BW = imdilate(BW, strel("rectangle",[2 6]));% Ottimale per trovare i O e X
 
 % BW= bwmorph(BW,'skeleton');
 BW = bwskel(BW);
@@ -630,30 +629,10 @@ peaks = houghpeaks(H, 60,'Theta',5:85,'Threshold',threshold);
 % Extract the detected lines based on the found peaks
 lines2 = houghlines(BW, theta, rho, peaks,"MinLength",50,"FillGap",20);
 
-% all_lines = [lines1 lines2];
-% % Calculate centroids for all detected lines
-% centroids = zeros(length(all_lines), 2);
-% thetas = zeros(length(all_lines), 1);
-% rhos = zeros(length(all_lines), 1);
-% 
-% for k = 1:length(all_lines)
-%     % Calculate midpoint of each line
-%     pt1 = all_lines(k).point1;
-%     pt2 = all_lines(k).point2;
-%     centroids(k,:) = [(pt1(1) + pt2(1))/2, (pt1(2) + pt2(2))/2];
-% 
-%     % Store theta and rho values
-%     thetas(k) = all_lines(k).theta;
-%     rhos(k) = all_lines(k).rho;
-% end
-% 
-% 
-% 
+%%
 
-
-
-
-%% Recognizing the segments ( by identify the cluster with BDSCAN)
+%% 
+% 2. Recognizing the segments ( by identify the cluster with BDSCAN)
 
 % Apply DBSCAN on the combined features
 % Confronto tra diverse configurazioni di DBSCAN
@@ -687,131 +666,341 @@ data_norm = [centroid_x_norm, centroid_y_norm, thetas_norm, rhos_norm];
 % Parametri per DBSCAN
 epsilon = 0.25; % Epsilon per dati normalizzati (0-1)
 
-% Confronta diverse configurazioni di DBSCAN
-% Test con minPts = 1
 minPts = 1;
 idx1 = dbscan(data_norm, epsilon, minPts);
 num_clusters = max(idx1);
 noise_points1 = sum(idx1 == -1);
 
 
-% Find the optimal theta for each cluster
+% 3. optimize the cluster information by reducing the number of lines
 
+% Find the optimal theta for each cluster
 % Inizializza array per memorizzare theta ottimale per ogni cluster
+% Find the optimal theta and rho for each cluster
 theta_ottimali = zeros(num_clusters, 1);
 rho_ottimali = zeros(num_clusters, 1);
+punti_rette = zeros(num_clusters, 4);
 
-% Per ogni cluster, calcola il theta ottimale
+new_centroids= zeros(num_clusters,2);
+
+segment_length = 50; 
 for i = 1:num_clusters
-    % Trova gli indici dei punti appartenenti al cluster i
     cluster_indices = find(idx1 == i);
+    cluster_centroids = centroids(cluster_indices, :);
+    cluster_thetas = thetas(cluster_indices);  % Theta in gradi
     
-    % Estrai gli angoli theta per questo cluster
-    cluster_thetas = thetas(cluster_indices);
+    % Compute the average theta (computing circular mean)
+    x_sum = sum(cosd(cluster_thetas));
+    y_sum = sum(sind(cluster_thetas));
+    theta_avg_rad = atan2(y_sum, x_sum); 
+    theta_avg_deg = rad2deg(theta_avg_rad); %convert result in degrees
     
-    % Calcola la media degli angoli (attenzione alla circolarità)
-    % Conversione a coordinate cartesiane per gestire correttamente la media circolare
-    x_sum = sum(cos(cluster_thetas));
-    y_sum = sum(sin(cluster_thetas));
+    % Compute average rho
+    rhos_i = cluster_centroids(:,1) * cosd(theta_avg_deg) + cluster_centroids(:,2) * sind(theta_avg_deg);
+    rho_avg = mean(rhos_i);
     
-    % Calcola l'angolo medio
-    theta_ottimali(i) = atan2(y_sum, x_sum);
+    theta_ottimali(i) = theta_avg_deg;
+    rho_ottimali(i) = rho_avg;
+
+    % 1. Trova l'elemento del cluster con theta più vicino alla media
+    [~, idx_min] = min(abs(cluster_thetas - theta_avg_deg)); % Indice del theta più vicino
+    selected_centroid = cluster_centroids(idx_min, :); % Centroide selezionato
+    new_centroids(i,:)=selected_centroid;
+    % 2. Proietta il centroide selezionato sulla retta ottimale
+    x_proj = selected_centroid(1) - (selected_centroid(1)*cosd(theta_avg_deg) + selected_centroid(2)*sind(theta_avg_deg) - rho_avg) * cosd(theta_avg_deg);
+    y_proj = selected_centroid(2) - (selected_centroid(1)*cosd(theta_avg_deg) + selected_centroid(2)*sind(theta_avg_deg) - rho_avg) * sind(theta_avg_deg);
+
+    % 3. Calcola la direzione della retta
+    direction = [-sind(theta_avg_deg), cosd(theta_avg_deg)];
     
-    % Opzionale: calcola anche la distanza media (rho) per il cluster
-    cluster_rhos = rhos(cluster_indices);
-    rho_ottimali(i) = mean(cluster_rhos);
+    % 4. Calcola i punti estremi del segmento
+
+    x1 = x_proj - segment_length * direction(1);
+    y1 = y_proj - segment_length * direction(2);
+    x2 = x_proj + segment_length * direction(1);
+    y2 = y_proj + segment_length * direction(2);
     
-    % Visualizza la retta ottimale per questo cluster
-    % Ricava punti sulla retta usando la forma parametrica
-    x_line = cos(theta_ottimali(i)) * rho_ottimali(i) - 1000*sin(theta_ottimali(i)):sin(theta_ottimali(i)) * rho_ottimali(i) + 1000*cos(theta_ottimali(i));
-    y_line = sin(theta_ottimali(i)) * rho_ottimali(i) + 1000*cos(theta_ottimali(i)):(-cos(theta_ottimali(i)) * rho_ottimali(i) + 1000*sin(theta_ottimali(i)));
-    
-    % Converti la retta in forma y = mx + q per visualizzazione
-    if abs(sin(theta_ottimali(i))) > 1e-10  % Evita divisione per zero
-        m = -cos(theta_ottimali(i)) / sin(theta_ottimali(i));
-        q = rho_ottimali(i) / sin(theta_ottimali(i));
-        fprintf('Cluster %d: theta ottimale = %.2f rad, rho ottimale = %.2f, equazione retta: y = %.2fx + %.2f\n', ...
-            i, theta_ottimali(i), rho_ottimali(i), m, q);
-    else
-        % Retta verticale
-        fprintf('Cluster %d: theta ottimale = %.2f rad, rho ottimale = %.2f, equazione retta: x = %.2f\n', ...
-            i, theta_ottimali(i), rho_ottimali(i), rho_ottimali(i));
+    punti_rette(i, :) = [x1, y1, x2, y2];
+end
+
+% TODO da sistemare
+% Rimuovi linee con la stessa pendenza che siano troppo vicine tra loro
+
+% Parametri di tolleranza (regolabili)
+angle_threshold = 3;   % Gradi per differenza angolare massima
+distance_threshold = 100; % Pixel per distanza massima tra centroidi
+
+% Calcola l'angolo effettivo delle linee (dalla normale di Hough)
+theta_line = theta_ottimali + 90; % Converti theta della normale in angolo della linea
+
+% Normalizza gli angoli nell'intervallo [0, 180) per gestire la periodicità
+theta_line = mod(theta_line, 180);
+theta_ottimali
+% Inizializza vettore logico per linee da mantenere
+keep = true(num_clusters, 1);
+
+% Confronta tutte le coppie di linee
+for i = 1:num_clusters
+    if ~keep(i), continue; end % Salta linee già marcate per la rimozione
+
+    for j = i+1:num_clusters
+        if ~keep(j), continue; end
+
+        % Calcola differenza angolare (considerando la periodicità 180°)
+        angle_diff = abs(theta_line(i) - theta_line(j));
+        angle_diff = min(angle_diff, 180 - angle_diff); % Prendi il minimo tra diff e 180-diff
+        centroid_dist = norm(new_centroids(i,:) - new_centroids(j,:));
+
+
+        % Criterio di controllo sovrapposizione e vicinanza tra due linee
+        if angle_diff <= angle_threshold && centroid_dist<=distance_threshold
+
+            updated_centroid = mean([new_centroids(i,:); new_centroids(j,:)]);
+
+
+            keep(j) = false; % Rimuovi la linea j (mantieni la linea i)
+            theta_ottimali(i) = mean([theta_ottimali(i),theta_ottimali(j)]); % aggiorno   
+
+                % 2. Ricalcola rho_ottimali usando il centroide
+                rho_ottimali(i) = updated_centroid(1) * cosd(theta_ottimali(i)) + updated_centroid(2) * sind(theta_ottimali(i));
+
+                % Proietta il centroide sulla nuova retta
+                x_proj = updated_centroid(1) - (updated_centroid(1)*cosd(theta_ottimali(i)) + updated_centroid(2)*sind(theta_ottimali(i)) - rho_ottimali(i)) * cosd(theta_ottimali(i));
+                y_proj = updated_centroid(2) - (updated_centroid(1)*cosd(theta_ottimali(i)) + updated_centroid(2)*sind(theta_ottimali(i)) - rho_ottimali(i)) * sind(theta_ottimali(i));
+
+                % Calcola direzione aggiornata
+                direction = [-sind(theta_ottimali(i)), cosd(theta_ottimali(i))];
+
+                % Calcola nuovi punti estremi
+                x1 = x_proj - segment_length * direction(1);
+                y1 = y_proj - segment_length * direction(2);
+                x2 = x_proj + segment_length * direction(1);
+                y2 = y_proj + segment_length * direction(2);
+
+                punti_rette(i, :) = [x1, y1, x2, y2];
+        end
     end
 end
 
 
+% Filtra le strutture dati mantenendo solo le linee non ridondanti
+new_centroids = new_centroids(keep, :);
+punti_rette = punti_rette(keep, :);
+theta_ottimali = theta_ottimali(keep);
+rho_ottimali = rho_ottimali(keep);
+num_clusters = sum(keep); % Aggiorna il numero di cluster
 
 
+% Ordinamento
 
-% Plot the binary image first
-figure;
-imshow(BW);
+% Riordina nuovamente per mantenere la coerenza spaziale
+[~, sorted_indices] = sortrows(new_centroids, [1 2]);
+new_centroids = new_centroids(sorted_indices, :);
+punti_rette = punti_rette(sorted_indices, :);
+theta_ottimali = theta_ottimali(sorted_indices);
+
+% TODO > Riprendere da qua https://chat.deepseek.com/a/chat/s/52736c85-bbac-479c-8996-19663690c562
+
+
+%DEBUG
+% Visualizzazione con colori distinti
+figure; 
+imshow(BW); 
 hold on;
 
-% Define a colormap for different clusters
-% Exclude the first color (reserved for noise points)
-colors = hsv(num_clusters + 1);
-cluster_colors = colors(2:end, :);
-noise_color = [0.5 0.5 0.5]; % Gray for noise points
+% Genera una matrice di colori unici (una riga per cluster)
+colors = hsv(num_clusters); % Usa la mappa di colori "hsv"
 
-% Loop through each cluster and plot points with corresponding lines
-for cluster_id = 1:num_clusters
-    % Find indices of points in current cluster
-    cluster_points = find(idx1 == cluster_id);
+for i = 1:num_clusters
+    % Estrai il colore per il cluster corrente
+    current_color = colors(i, :);
     
-    % Plot centroids of current cluster
-    scatter(centroids(cluster_points, 1), centroids(cluster_points, 2), 30, ...
-            'MarkerFaceColor', cluster_colors(cluster_id,:), ...
-            'MarkerEdgeColor', 'k', ...
-            'LineWidth', 0.5, ...
-            'Marker', 'o');
+    % Disegna la linea del cluster
+    plot(punti_rette(i, [1 3]), punti_rette(i, [2 4]), ...
+        'LineWidth', 2, 'Color', current_color);
     
-    % Plot lines of current cluster
-    for i = 1:length(cluster_points)
-        line_idx = cluster_points(i);
-        pt1 = all_lines(line_idx).point1;
-        pt2 = all_lines(line_idx).point2;
-        
-        % Draw the line with same color as the cluster
-        line([pt1(1), pt2(1)], [pt1(2), pt2(2)], ...
-             'Color', cluster_colors(cluster_id,:), ...
-             'LineWidth', 2);
-    end
+    % Disegna il centroide selezionato
+    plot(new_centroids(i,1), new_centroids(i,2), ...
+        'o', 'MarkerFaceColor', current_color, 'MarkerEdgeColor', 'k');
 end
-
-% Plot noise points (idx1 == -1) and their lines if any
-noise_points = find(idx1 == -1);
-if ~isempty(noise_points)
-    % Plot noise centroids
-    scatter(centroids(noise_points, 1), centroids(noise_points, 2), 30, ...
-            'MarkerFaceColor', noise_color, ...
-            'MarkerEdgeColor', 'k', ...
-            'LineWidth', 0.5, ...
-            'Marker', 'x');
-    
-    % Plot noise lines
-    for i = 1:length(noise_points)
-        line_idx = noise_points(i);
-        pt1 = all_lines(line_idx).point1;
-        pt2 = all_lines(line_idx).point2;
-        
-        % Draw the line with noise color
-        line([pt1(1), pt2(1)], [pt1(2), pt2(2)], ...
-             'Color', noise_color, ...
-             'LineWidth', 1, ...
-             'LineStyle', '--');  % Dashed line for noise
-    end
-end
-
-% Add a title and legend
-title('DBSCAN Clustering Results with Lines on Binary Image');
-
 
 hold off;
+title('Cluster con colori distinti');
 
+%% Identify the possible locations of the exam information (Both X or O)
+%Idea trovo dei possibili candidati che identificano aree dove potrebbero
+%esserci le X o O, dopodiché attraverso le rette che ho trovato
+%precedentemente escludo i cerchi che 
 % Soluzion per trovare i cerchi nel grafico
 [centers, radii, metric] = imfindcircles(BW,[6 20],"ObjectPolarity","bright","Method","TwoStage");
 
 figure;imshow(BW);
 hold on;
 viscircles(centers, radii,'EdgeColor','b');
+
+%% Trovo le intersezioni tra le linee dei cluster
+% Prima finire le parti precedenti
+
+
+% List of x coordinates of intersection points
+point_intersec_x = [];
+% List of y coordinates of intersection points
+point_intersec_y = [];
+
+figure;
+imshow(BW);
+hold on;
+
+for i = 1:num_clusters
+    % First line
+    line1_p1 = punti_rette(i,1:2);
+    line1_p2 = punti_rette(i,3:4);
+    i
+    new_centroids(i,:)
+
+    % Check all intersections between line1 and the other lines
+    for j = i+1:num_clusters
+
+        if j ~= i 
+            % Second line
+            line2_p1 = punti_rette(j,1:2);
+            line2_p2 = punti_rette(j,3:4);
+            
+    new_centroids(j,:)
+            [intersec_X, intersec_Y] = intersectLines(line1_p1(1), line1_p1(2), line1_p2(1), line1_p2(2), line2_p1(1), line2_p1(2), line2_p2(1), line2_p2(2));
+            
+            if not(isnan(intersec_X) || isnan(intersec_Y)) && (~any(intersec_X>=new_centroids(j,1))|| ~any(intersec_X<=new_centroids(i,1)) ) 
+                point_intersec_x = [point_intersec_x, intersec_X];
+                point_intersec_y = [point_intersec_y, intersec_Y];
+                plot(intersec_X, intersec_Y, 'ro', ...
+    'MarkerSize', 10, ...
+    'MarkerFaceColor', 'r', ...
+    'MarkerEdgeColor', 'k');
+
+            end
+            % Disegna le intersezioni con marcatori rossi
+
+        end
+
+    end
+end
+hold off;
+title('Punti di intersezione tra le linee dei cluster');
+
+% Combine coordinates in a new matrix 
+intersections = [point_intersec_x(:) point_intersec_y(:)];
+
+
+
+
+%% Da parte
+% 
+% % Inizializza array logico per cerchi validi
+% valid_circles = false(size(centers,1), 1);
+% 
+% % Per ogni cerchio trovato
+% for i = 1:size(centers,1)
+%     circle_center = centers(i,:);
+%     circle_radius = radii(i);
+% 
+%     % Controlla intersezione con tutte le linee
+%     for j = 1:size(punti_rette,1)
+%         % Estrai coordinate della linea
+%         x1 = punti_rette(j,1);
+%         y1 = punti_rette(j,2);
+%         x2 = punti_rette(j,3);
+%         y2 = punti_rette(j,4);
+% 
+%         % Calcola distanza minima tra centro cerchio e segmento
+%         [distance, ~] = point_to_line_segment(circle_center, [x1 y1], [x2 y2]);
+% 
+%         % Se la distanza è <= raggio, segna come valido
+%         if distance <= circle_radius
+%             valid_circles(i) = true;
+%             break % Interrompi il ciclo se trovato almeno una intersezione
+%         end
+%     end
+% end
+% 
+% % Filtra i cerchi
+% filtered_centers = centers(valid_circles,:);
+% filtered_radii = radii(valid_circles);
+% filtered_metric = metric(valid_circles);
+% 
+% figure;
+% imshow(BW);
+% viscircles(filtered_centers, filtered_radii, 'Color','r');
+% hold on;
+% for i = 1:size(punti_rette,1)
+%     plot(punti_rette(i,[1 3]), punti_rette(i,[2 4]), 'g-', 'LineWidth',2)
+% end
+% hold off;
+
+%% 
+% DEBUG
+% % Plot the binary image first
+% figure;
+% imshow(BW);
+% hold on;
+% 
+% % Define a colormap for different clusters
+% % Exclude the first color (reserved for noise points)
+% colors = hsv(num_clusters + 1);
+% cluster_colors = colors(2:end, :);
+% noise_color = [0.5 0.5 0.5]; % Gray for noise points
+% 
+% % Loop through each cluster and plot points with corresponding lines
+% for cluster_id = 1:num_clusters
+%     % Find indices of points in current cluster
+%     cluster_points = find(idx1 == cluster_id);
+% 
+%     % Plot centroids of current cluster
+%     scatter(centroids(cluster_points, 1), centroids(cluster_points, 2), 30, ...
+%             'MarkerFaceColor', cluster_colors(cluster_id,:), ...
+%             'MarkerEdgeColor', 'k', ...
+%             'LineWidth', 0.5, ...
+%             'Marker', 'o');
+% 
+%     % Plot lines of current cluster
+%     for i = 1:length(cluster_points)
+%         line_idx = cluster_points(i);
+%         pt1 = all_lines(line_idx).point1;
+%         pt2 = all_lines(line_idx).point2;
+% 
+%         % Draw the line with same color as the cluster
+%         line([pt1(1), pt2(1)], [pt1(2), pt2(2)], ...
+%              'Color', cluster_colors(cluster_id,:), ...
+%              'LineWidth', 2);
+%     end
+% end
+% 
+% % Plot noise points (idx1 == -1) and their lines if any
+% noise_points = find(idx1 == -1);
+% if ~isempty(noise_points)
+%     % Plot noise centroids
+%     scatter(centroids(noise_points, 1), centroids(noise_points, 2), 30, ...
+%             'MarkerFaceColor', noise_color, ...
+%             'MarkerEdgeColor', 'k', ...
+%             'LineWidth', 0.5, ...
+%             'Marker', 'x');
+% 
+%     % Plot noise lines
+%     for i = 1:length(noise_points)
+%         line_idx = noise_points(i);
+%         pt1 = all_lines(line_idx).point1;
+%         pt2 = all_lines(line_idx).point2;
+% 
+%         % Draw the line with noise color
+%         line([pt1(1), pt2(1)], [pt1(2), pt2(2)], ...
+%              'Color', noise_color, ...
+%              'LineWidth', 1, ...
+%              'LineStyle', '--');  % Dashed line for noise
+%     end
+% end
+% 
+% % Add a title and legend
+% title('DBSCAN Clustering Results with Lines on Binary Image');
+% 
+% 
+% hold off;
+
