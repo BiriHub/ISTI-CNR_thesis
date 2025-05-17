@@ -683,7 +683,7 @@ punti_rette = zeros(num_clusters, 4);
 
 new_centroids= zeros(num_clusters,2);
 
-segment_length = 50; 
+segment_length = 10; 
 for i = 1:num_clusters
     cluster_indices = find(idx1 == i);
     cluster_centroids = centroids(cluster_indices, :);
@@ -757,8 +757,6 @@ for i = 1:num_clusters
 
             updated_centroid = mean([new_centroids(i,:); new_centroids(j,:)]);
 
-
-            keep(j) = false; % Rimuovi la linea j (mantieni la linea i)
             theta_ottimali(i) = mean([theta_ottimali(i),theta_ottimali(j)]); % aggiorno   
 
                 % 2. Ricalcola rho_ottimali usando il centroide
@@ -778,6 +776,9 @@ for i = 1:num_clusters
                 y2 = y_proj + segment_length * direction(2);
 
                 punti_rette(i, :) = [x1, y1, x2, y2];
+
+                new_centroids(i,:)=updated_centroid;
+                keep(j) = false; % Rimuovi la linea j (mantieni la linea i)
         end
     end
 end
@@ -828,19 +829,38 @@ hold off;
 title('Cluster con colori distinti');
 
 %% Identify the possible locations of the exam information (Both X or O)
-%Idea trovo dei possibili candidati che identificano aree dove potrebbero
-%esserci le X o O, dopodiché attraverso le rette che ho trovato
-%precedentemente escludo i cerchi che 
-% Soluzion per trovare i cerchi nel grafico
-[centers, radii, metric] = imfindcircles(BW,[6 20],"ObjectPolarity","bright","Method","TwoStage");
-
-figure;imshow(BW);
-hold on;
-viscircles(centers, radii,'EdgeColor','b');
+% %Idea trovo dei possibili candidati che identificano aree dove potrebbero
+% %esserci le X o O, dopodiché attraverso le rette che ho trovato
+% %precedentemente escludo i cerchi che 
+% % Soluzion per trovare i cerchi nel grafico
+% [centers, radii, metric] = imfindcircles(BW,[6 20],"ObjectPolarity","bright","Method","TwoStage");
+% 
+% figure;imshow(BW);
+% hold on;
+% viscircles(centers, radii,'EdgeColor','b');
 
 %% Trovo le intersezioni tra le linee dei cluster
 % Prima finire le parti precedenti
 
+% Offset della regione ritagliata
+offset_x = x - 1;
+offset_y = y - 1;
+
+% Mappa e ordina vertical_lines 
+adjusted_vertical_lines = vertical_lines;
+adjusted_vertical_lines(:, [1,3]) = vertical_lines(:, [1,3]) - offset_x;
+adjusted_vertical_lines(:, [2,4]) = vertical_lines(:, [2,4]) - offset_y;
+
+[~, sorted_indices] = sortrows(adjusted_vertical_lines);
+adjusted_vertical_lines = adjusted_vertical_lines(sorted_indices, :);
+
+% Mappa e ordina horizontal_lines
+adjusted_horizontal_lines = horizontal_lines;
+adjusted_horizontal_lines(:, [1,3]) = horizontal_lines(:, [1,3]) - offset_x;
+adjusted_horizontal_lines(:, [2,4]) = horizontal_lines(:, [2,4]) - offset_y;
+
+[~, sorted_indices] = sortrows(adjusted_horizontal_lines);
+adjusted_horizontal_lines = adjusted_horizontal_lines(sorted_indices, :);
 
 % List of x coordinates of intersection points
 point_intersec_x = [];
@@ -850,26 +870,53 @@ point_intersec_y = [];
 figure;
 imshow(BW);
 hold on;
+maxDist=200;
 
 for i = 1:num_clusters
+i
     % First line
     line1_p1 = punti_rette(i,1:2);
     line1_p2 = punti_rette(i,3:4);
-    i
-    new_centroids(i,:)
+
+    % Compute intersection with the first left vertical grid line 
+    if i==1
+            line2_p1 = adjusted_vertical_lines(i,1:2);
+            line2_p2 = adjusted_vertical_lines(i,3:4);
+            [intersec_X, intersec_Y] = intersectLines(line1_p1(1), line1_p1(2), line1_p2(1), line1_p2(2), line2_p1(1), line2_p1(2), line2_p2(1), line2_p2(2));
+                point_intersec_x = [point_intersec_x, intersec_X];
+                point_intersec_y = [point_intersec_y, intersec_Y];
+                plot(intersec_X, intersec_Y, 'ro', 'MarkerSize', 10, 'MarkerFaceColor', 'g', 'MarkerEdgeColor', 'k');
+                % plot(line2_p1(i,1), line2_p1(i,2), 'LineWidth', 2, 'Color', 'blue');
+                % plot(line2_p1(i,1), line2_p1(i,2), 'LineWidth', 2, 'Color', 'blue');
+                
+                continue;
+    end
+    % Compute intersection with the last right vertical grid line
+    if i== num_clusters
+            line2_p1 = adjusted_vertical_lines(end,1:2);
+            line2_p2 = adjusted_vertical_lines(end,3:4);
+            [intersec_X, intersec_Y] = intersectLines(line1_p1(1), line1_p1(2), line1_p2(1), line1_p2(2), line2_p1(1), line2_p1(2), line2_p2(1), line2_p2(2));
+                point_intersec_x = [point_intersec_x, intersec_X];
+                point_intersec_y = [point_intersec_y, intersec_Y];
+                plot(intersec_X, intersec_Y, 'ro', 'MarkerSize', 10, 'MarkerFaceColor', 'g', 'MarkerEdgeColor', 'k');
+
+                continue;
+    end
 
     % Check all intersections between line1 and the other lines
     for j = i+1:num_clusters
-
+j
         if j ~= i 
             % Second line
             line2_p1 = punti_rette(j,1:2);
             line2_p2 = punti_rette(j,3:4);
             
-    new_centroids(j,:)
+
             [intersec_X, intersec_Y] = intersectLines(line1_p1(1), line1_p1(2), line1_p2(1), line1_p2(2), line2_p1(1), line2_p1(2), line2_p2(1), line2_p2(2));
-            
-            if not(isnan(intersec_X) || isnan(intersec_Y)) && (~any(intersec_X>=new_centroids(j,1))|| ~any(intersec_X<=new_centroids(i,1)) ) 
+            centroid1_dist = norm(new_centroids(i,:) - [intersec_X, intersec_Y] );
+            centroid2_dist = norm(new_centroids(j,:) - [intersec_X, intersec_Y] );
+
+            if not(isnan(intersec_X) || isnan(intersec_Y)) && centroid1_dist<maxDist && centroid2_dist<maxDist 
                 point_intersec_x = [point_intersec_x, intersec_X];
                 point_intersec_y = [point_intersec_y, intersec_Y];
                 plot(intersec_X, intersec_Y, 'ro', ...
