@@ -838,16 +838,7 @@ end
 hold off;
 title('Cluster con colori distinti');
 
-%% Identify the possible locations of the exam information (Both X or O)
-% %Idea trovo dei possibili candidati che identificano aree dove potrebbero
-% %esserci le X o O, dopodiché attraverso le rette che ho trovato
-% %precedentemente escludo i cerchi che 
-% % Soluzion per trovare i cerchi nel grafico
-% [centers, radii, metric] = imfindcircles(BW,[6 20],"ObjectPolarity","bright","Method","TwoStage");
-% 
-% figure;imshow(BW);
-% hold on;
-% viscircles(centers, radii,'EdgeColor','b');
+
 
 %% Trovo le intersezioni tra le linee dei cluster
 % Prima finire le parti precedenti
@@ -947,6 +938,20 @@ title('Punti di intersezione tra le linee dei cluster');
 
 % Combine coordinates in a new matrix 
 intersections = [point_intersec_x(:) point_intersec_y(:)];
+
+%% Fase successiva: trovare i cerchi che siano presenti nell'area vicino ai punti delle intersezioni tra linee
+
+% Identify the possible locations of the exam information (Both X or O)
+% %Idea trovo dei possibili candidati che identificano aree dove potrebbero
+% %esserci le X o O, dopodiché attraverso le rette che ho trovato
+% %precedentemente escludo i cerchi che 
+% Soluzion per trovare i cerchi nel grafico
+[centers, radii, metric] = imfindcircles(BW,[7 25],"ObjectPolarity","bright","Method","PhaseCode");
+
+% DEBUG
+figure;imshow(BW);
+hold on;
+viscircles(centers, radii,'EdgeColor','b');
 
 
 %% Da parte
