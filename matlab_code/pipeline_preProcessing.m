@@ -895,7 +895,6 @@ for i = 1:size(adjusted_vertical_lines, 1)
     plot([line(1), line(3)], [line(2), line(4)], 'g-', 'LineWidth', 1.5);
 end
 
-maxDist=200;
 
 for i = 1:num_clusters
 i
@@ -914,13 +913,13 @@ i
                 % plot(line2_p1(i,1), line2_p1(i,2), 'LineWidth', 2, 'Color', 'blue');
                 % plot(line2_p1(i,1), line2_p1(i,2), 'LineWidth', 2, 'Color', 'blue');
                 
-                continue;
     end
     % Compute intersection with the last right vertical grid line
     if i== num_clusters
             line2_p1 = adjusted_vertical_lines(end,1:2);
             line2_p2 = adjusted_vertical_lines(end,3:4);
             [intersec_X, intersec_Y] = intersectLines(line1_p1(1), line1_p1(2), line1_p2(1), line1_p2(2), line2_p1(1), line2_p1(2), line2_p2(1), line2_p2(2));
+           
                 point_intersec_x = [point_intersec_x, intersec_X];
                 point_intersec_y = [point_intersec_y, intersec_Y];
                 plot(intersec_X, intersec_Y, 'ro', 'MarkerSize', 10, 'MarkerFaceColor', 'g', 'MarkerEdgeColor', 'k');
@@ -928,41 +927,26 @@ i
                 continue;
     end
 
-    % Check all intersections between line1 and the other lines
-    for j = i+1:num_clusters
-j
-        if j ~= i 
-            % Second line
-            line2_p1 = punti_rette(j,1:2);
-            line2_p2 = punti_rette(j,3:4);
-            
+    % Check intersections between line1 and the next line
+    j = i+1;
+    % Second line
+    line2_p1 = punti_rette(j,1:2);
+    line2_p2 = punti_rette(j,3:4);
+    
+    [intersec_X, intersec_Y] = intersectLines(line1_p1(1), line1_p1(2), line1_p2(1), line1_p2(2), line2_p1(1), line2_p1(2), line2_p2(1), line2_p2(2));
 
-            [intersec_X, intersec_Y] = intersectLines(line1_p1(1), line1_p1(2), line1_p2(1), line1_p2(2), line2_p1(1), line2_p1(2), line2_p2(1), line2_p2(2));
-            centroid1_dist = norm(new_centroids(i,:) - [intersec_X, intersec_Y] );
-            centroid2_dist = norm(new_centroids(j,:) - [intersec_X, intersec_Y] );
-
-            if not(isnan(intersec_X) || isnan(intersec_Y)) && centroid1_dist<maxDist && centroid2_dist<maxDist 
-                point_intersec_x = [point_intersec_x, intersec_X];
-                point_intersec_y = [point_intersec_y, intersec_Y];
-                plot(intersec_X, intersec_Y, 'ro', ...
-    'MarkerSize', 10, ...
-    'MarkerFaceColor', 'r', ...
-    'MarkerEdgeColor', 'k');
-
-            end
-            % Disegna le intersezioni con marcatori rossi
-
-        end
-
+    if not(isnan(intersec_X) || isnan(intersec_Y))
+        point_intersec_x = [point_intersec_x, intersec_X];
+        point_intersec_y = [point_intersec_y, intersec_Y];
+        plot(intersec_X, intersec_Y, 'ro', 'MarkerSize', 10, 'MarkerFaceColor', 'r', 'MarkerEdgeColor', 'k');
     end
+
 end
 hold off;
 title('Punti di intersezione tra le linee dei cluster');
 
 % Combine coordinates in a new matrix 
 intersections = [point_intersec_x(:) point_intersec_y(:)];
-
-
 
 
 %% Da parte
