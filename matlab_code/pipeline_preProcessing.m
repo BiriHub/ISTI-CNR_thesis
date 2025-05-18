@@ -5,7 +5,6 @@ clc; clear; close all;
 % Load image
 img = imread('Noah_01_01_02.jpg');
 grayImg = rgb2gray(img);
-grayImg = medfilt2(grayImg); % median filter to reduce errors (3 by 3)
 
 
 %% 2. Preparing the image before applying th Hough transformation to identify an APPROXIMATION of grid corners
@@ -528,7 +527,6 @@ for i = 1:size(freq_points,1)
 end
 
 % Decibel axis
-
 left_corner=max(grid_corner_lines(2).point1(1),grid_corner_lines(2).point2(1));
 idx = intersectionPoints(:,1) <= left_corner;
 dB_points = sortrows(intersectionPoints(idx,:));
@@ -611,8 +609,8 @@ BW = imdilate(BW, strel("rectangle",[2 6]));% Ottimale per trovare i O e X
 % BW= bwmorph(BW,'skeleton');
 BW = bwskel(BW);
 
-% nhood_size = floor(size(H)/25) * 2 + 1; % Dimensione dell'intorno più piccola
-figure ; imshow(BW);
+% DEBUG
+% figure ; imshow(BW);
 % Compute the Hough Transform
 [H, theta, rho] = hough(BW,'Theta',-85:-5);
 
@@ -623,13 +621,26 @@ peaks = houghpeaks(H, 60,'Theta',-85:-5,'Threshold',threshold); % 40 for the max
 lines1 = houghlines(BW, theta, rho, peaks,"MinLength",50,"FillGap",20);
 
 [H, theta, rho] = hough(BW,'Theta',5:85);
-threshold = ceil(0.6 * max(H(:))); % Soglia più bassa per includere picchi meno prominenti
 
 peaks = houghpeaks(H, 60,'Theta',5:85,'Threshold',threshold);
 % Extract the detected lines based on the found peaks
 lines2 = houghlines(BW, theta, rho, peaks,"MinLength",50,"FillGap",20);
 
-%%
+lines=[lines1, lines2];
+% DEBUG
+figure;
+imshow(BW);
+hold on;
+for k = 1:length(lines)
+    xy = [lines(k).point1; lines(k).point2];
+    plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', 'green');
+    % Display the starting and ending points of the lines
+    plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
+    plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
+end
+title('Filtered Lines detected with the Hough Transform');
+hold off;
+
 
 %% 
 % 2. Recognizing the segments ( by identify the cluster with BDSCAN)
@@ -735,7 +746,6 @@ theta_line = theta_ottimali + 90; % Converti theta della normale in angolo della
 
 % Normalizza gli angoli nell'intervallo [0, 180) per gestire la periodicità
 theta_line = mod(theta_line, 180);
-theta_ottimali
 % Inizializza vettore logico per linee da mantenere
 keep = true(num_clusters, 1);
 
@@ -753,7 +763,7 @@ for i = 1:num_clusters
 
 
         % Criterio di controllo sovrapposizione e vicinanza tra due linee
-        if angle_diff <= angle_threshold && centroid_dist<=distance_threshold
+        if angle_diff <= angle_threshold || centroid_dist<=distance_threshold
 
             updated_centroid = mean([new_centroids(i,:); new_centroids(j,:)]);
 
@@ -870,6 +880,21 @@ point_intersec_y = [];
 figure;
 imshow(BW);
 hold on;
+% =============================================
+% 1. Plot delle linee orizzontali e verticali
+% =============================================
+% Linee orizzontali in blu
+for i = 1:size(adjusted_horizontal_lines, 1)
+    line = adjusted_horizontal_lines(i,:);
+    plot([line(1), line(3)], [line(2), line(4)], 'b-', 'LineWidth', 1.5);
+end
+
+% Linee verticali in verde
+for i = 1:size(adjusted_vertical_lines, 1)
+    line = adjusted_vertical_lines(i,:);
+    plot([line(1), line(3)], [line(2), line(4)], 'g-', 'LineWidth', 1.5);
+end
+
 maxDist=200;
 
 for i = 1:num_clusters
