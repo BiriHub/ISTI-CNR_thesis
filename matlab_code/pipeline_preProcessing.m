@@ -825,42 +825,71 @@ new_centroids = new_centroids(sorted_indices, :);
 punti_rette = punti_rette(sorted_indices, :);
 theta_ottimali = theta_ottimali(sorted_indices);
 
-% TODO > Riprendere da qua https://chat.deepseek.com/a/chat/s/52736c85-bbac-479c-8996-19663690c562
+% Trova i cerchi nell'immagine binaria (per le verifiche successive)
+[centers, radii, metric] = imfindcircles(BW,[7 25],"ObjectPolarity","bright","Method","PhaseCode");
 
 
-%DEBUG
-% Visualizzazione con colori distinti
-figure; 
-imshow(BW); 
-hold on;
+% Verifica cerchi nei centroidi dei cluster uniti
+tolerance_centroid = 15; % Tolleranza per cerchi nei centroidi
+centroid_circles = [];
 
-% Genera una matrice di colori unici (una riga per cluster)
-colors = hsv(num_clusters); % Usa la mappa di colori "hsv"
-
+fprintf('\n=== VERIFICA CERCHI NEI CENTROIDI DEI CLUSTER UNITI ===\n');
 for i = 1:num_clusters
-    % Estrai il colore per il cluster corrente
-    current_color = colors(i, :);
-    
-    % Disegna la linea del cluster
-    plot(punti_rette(i, [1 3]), punti_rette(i, [2 4]), ...
-        'LineWidth', 2, 'Color', current_color);
-    
-    % Disegna il centroide selezionato
-    plot(new_centroids(i,1), new_centroids(i,2), ...
-        'o', 'MarkerFaceColor', current_color, 'MarkerEdgeColor', 'k');
+    if merged_flags(i)
+        [found, circle_idx, dist] = checkCircleAtPosition(new_centroids(i,1), new_centroids(i,2), centers, radii, tolerance_centroid);
+        if found
+            fprintf('Cluster %d (unito): CERCHIO TROVATO nel centroide - Cerchio %d a distanza %.2f\n', i, circle_idx, dist);
+            centroid_circles = [centroid_circles; i, circle_idx, dist, new_centroids(i,:)];
+        else
+            % Ricerca del cerchio più vicino usando knnsearch
+            [closest_idx, closest_dist] = knnsearch(centers, new_centroids(i,:));
+            
+            % Verifica se la distanza è ragionevole (opzionale)
+            if closest_dist <= 30  % soglia di distanza massima
+                fprintf('Cluster %d (unito): Cerchio più vicino %d a distanza %.2f dal centroide\n', i, closest_idx, closest_dist);
+                centroid_circles = [centroid_circles; i, closest_idx, closest_dist, new_centroids(i,:)];
+            else
+                fprintf('Cluster %d (unito): NESSUN CERCHIO trovato vicino al centroide (distanza minima: %.2f)\n', i, closest_dist);
+            end
+        end
+    end
 end
 
-hold off;
-title('Cluster con colori distinti');
 
+
+% %DEBUG
+% % Visualizzazione con colori distinti
+% figure; 
+% imshow(BW); 
+% hold on;
+% 
+% % Genera una matrice di colori unici (una riga per cluster)
+% colors = hsv(num_clusters); % Usa la mappa di colori "hsv"
+% 
+% for i = 1:num_clusters
+%     % Estrai il colore per il cluster corrente
+%     current_color = colors(i, :);
+% 
+%     % Disegna la linea del cluster
+%     plot(punti_rette(i, [1 3]), punti_rette(i, [2 4]), ...
+%         'LineWidth', 2, 'Color', current_color);
+% 
+%     % Disegna il centroide selezionato
+%     plot(new_centroids(i,1), new_centroids(i,2), ...
+%         'o', 'MarkerFaceColor', current_color, 'MarkerEdgeColor', 'k');
+% end
+% 
+% hold off;
+% title('Cluster con colori distinti');
+% 
 
 
 %% Trovo le intersezioni tra le linee dei cluster
 % Prima finire le parti precedenti
 
 % Offset della regione ritagliata
-offset_x = x - 1;
-offset_y = y - 1;
+offset_x = x;
+offset_y = y;
 
 % Mappa e ordina vertical_lines 
 adjusted_vertical_lines = vertical_lines;
@@ -883,6 +912,12 @@ point_intersec_x = [];
 % List of y coordinates of intersection points
 point_intersec_y = [];
 
+% % Trova i cerchi nell'immagine binaria
+% [centers, radii, metric] = imfindcircles(BW,[7 25],"ObjectPolarity","bright","Method","PhaseCode");
+
+% Array per memorizzare tutte le intersezioni
+line_circle_intersections = [];
+
 figure;
 imshow(BW);
 hold on;
@@ -902,8 +937,12 @@ for i = 1:size(adjusted_vertical_lines, 1)
 end
 
 
+% Disegna i cerchi rilevati
+viscircles(centers, radii,'EdgeColor','b', 'LineWidth', 2);
+
+intersection_points = [];
+
 for i = 1:num_clusters
-i
     % First line
     line1_p1 = punti_rette(i,1:2);
     line1_p2 = punti_rette(i,3:4);
@@ -913,24 +952,11 @@ i
             line2_p1 = adjusted_vertical_lines(i,1:2);
             line2_p2 = adjusted_vertical_lines(i,3:4);
             [intersec_X, intersec_Y] = intersectLines(line1_p1(1), line1_p1(2), line1_p2(1), line1_p2(2), line2_p1(1), line2_p1(2), line2_p2(1), line2_p2(2));
-                point_intersec_x = [point_intersec_x, intersec_X];
-                point_intersec_y = [point_intersec_y, intersec_Y];
+            intersection_points = [intersection_points; intersec_X, intersec_Y, 0, i];
                 plot(intersec_X, intersec_Y, 'ro', 'MarkerSize', 10, 'MarkerFaceColor', 'g', 'MarkerEdgeColor', 'k');
                 % plot(line2_p1(i,1), line2_p1(i,2), 'LineWidth', 2, 'Color', 'blue');
                 % plot(line2_p1(i,1), line2_p1(i,2), 'LineWidth', 2, 'Color', 'blue');
-                
-    end
-    % Compute intersection with the last right vertical grid line
-    if i== num_clusters
-            line2_p1 = adjusted_vertical_lines(end,1:2);
-            line2_p2 = adjusted_vertical_lines(end,3:4);
-            [intersec_X, intersec_Y] = intersectLines(line1_p1(1), line1_p1(2), line1_p2(1), line1_p2(2), line2_p1(1), line2_p1(2), line2_p2(1), line2_p2(2));
-           
-                point_intersec_x = [point_intersec_x, intersec_X];
-                point_intersec_y = [point_intersec_y, intersec_Y];
-                plot(intersec_X, intersec_Y, 'ro', 'MarkerSize', 10, 'MarkerFaceColor', 'g', 'MarkerEdgeColor', 'k');
 
-                continue;
     end
 
     % Check intersections between line1 and the next line
@@ -942,8 +968,7 @@ i
     [intersec_X, intersec_Y] = intersectLines(line1_p1(1), line1_p1(2), line1_p2(1), line1_p2(2), line2_p1(1), line2_p1(2), line2_p2(1), line2_p2(2));
 
     if not(isnan(intersec_X) || isnan(intersec_Y))
-        point_intersec_x = [point_intersec_x, intersec_X];
-        point_intersec_y = [point_intersec_y, intersec_Y];
+        intersection_points = [intersection_points; intersec_X, intersec_Y, i, j];
         plot(intersec_X, intersec_Y, 'ro', 'MarkerSize', 10, 'MarkerFaceColor', 'r', 'MarkerEdgeColor', 'k');
     end
 
@@ -951,132 +976,151 @@ end
 hold off;
 title('Punti di intersezione tra le linee dei cluster');
 
-% Combine coordinates in a new matrix 
-intersections = [point_intersec_x(:) point_intersec_y(:)];
 
-%% Fase successiva: trovare i cerchi che siano presenti nell'area vicino ai punti delle intersezioni tra linee
+% % Combine coordinates in a new matrix 
+% intersections = [point_intersec_x(:) point_intersec_y(:)];
 
-% Identify the possible locations of the exam information (Both X or O)
-% %Idea trovo dei possibili candidati che identificano aree dove potrebbero
-% %esserci le X o O, dopodiché attraverso le rette che ho trovato
-% %precedentemente escludo i cerchi che 
-% Soluzion per trovare i cerchi nel grafico
-[centers, radii, metric] = imfindcircles(BW,[7 25],"ObjectPolarity","bright","Method","PhaseCode");
+
+
+% Verifica cerchi agli estremi delle intersezioni
+tolerance_intersection = 20; % Tolleranza per cerchi alle intersezioni
+max_search_radius = 100; % Raggio massimo di ricerca locale
+intersection_circles = [];
+fprintf('\n=== VERIFICA CERCHI ALLE INTERSEZIONI ===\n');
+for i = 1:size(intersection_points, 1)
+    int_x = intersection_points(i, 1);
+    int_y = intersection_points(i, 2);
+    line1_idx = intersection_points(i, 3);
+    line2_idx = intersection_points(i, 4);
+    
+    [found, circle_idx, dist] = checkCircleAtPosition(int_x, int_y, centers, radii, tolerance_intersection);
+    if found
+        fprintf('Intersezione %d: CERCHIO TROVATO - Cerchio %d a distanza %.2f\n', i, circle_idx, dist);
+        intersection_circles = [intersection_circles; i, circle_idx, dist, int_x, int_y, line1_idx, line2_idx];
+    else
+        % Ricerca del cerchio più vicino usando knnsearch
+        [closest_idx, closest_dist] = knnsearch(centers, [int_x, int_y]);
+        fprintf('Intersezione %d: Cerchio più vicino %d a distanza %.2f\n', i, closest_idx, closest_dist);
+        intersection_circles = [intersection_circles; i, closest_idx, closest_dist, int_x, int_y, line1_idx, line2_idx];
+    end
+end
 
 % DEBUG
-figure;imshow(BW);
+% Visualizzazione completa
+figure;
+imshow(BW);
 hold on;
-viscircles(centers, radii,'EdgeColor','b');
+
+% Disegna le rette con colori distinti
+colors = hsv(num_clusters);
+for i = 1:num_clusters
+    current_color = colors(i, :);
+    
+    % Linea più spessa se è stata unita
+    line_width =1;
+    if merged_flags(i)
+        line_width =3;
+    else 
+        line_width = 2;
+    end
+    plot(punti_rette(i, [1 3]), punti_rette(i, [2 4]), ...
+        'LineWidth', line_width, 'Color', current_color);
+    
+    % Centroide con marcatore speciale se unito
+    if merged_flags(i)
+        plot(new_centroids(i,1), new_centroids(i,2), ...
+            's', 'MarkerSize', 10, 'MarkerFaceColor', current_color, 'MarkerEdgeColor', 'k', 'LineWidth', 2);
+    else
+        plot(new_centroids(i,1), new_centroids(i,2), ...
+            'o', 'MarkerFaceColor', current_color, 'MarkerEdgeColor', 'k');
+    end
+end
+
+% Disegna tutti i cerchi in blu chiaro
+viscircles(centers, radii,'EdgeColor',[0.7 0.7 1], 'LineWidth', 1);
+
+% Evidenzia cerchi trovati nei centroidi
+for i = 1:size(centroid_circles, 1)
+    cluster_idx = centroid_circles(i, 1);
+    circle_idx = centroid_circles(i, 2);
+    center_pos = centers(circle_idx, :);
+    radius = radii(circle_idx);
+    
+    viscircles(center_pos, radius, 'EdgeColor', 'red', 'LineWidth', 3);
+    text(center_pos(1)+radius+5, center_pos(2), sprintf('C%d', cluster_idx), 'Color', 'red', 'FontWeight', 'bold');
+end
+
+% Evidenzia intersezioni e cerchi associati
+for i = 1:size(intersection_points, 1)
+    int_x = intersection_points(i, 1);
+    int_y = intersection_points(i, 2);
+    
+    % Punto di intersezione
+    plot(int_x, int_y, 'ro', 'MarkerSize', 8, 'MarkerFaceColor', 'yellow', 'MarkerEdgeColor', 'red', 'LineWidth', 2);
+    
+    % Se c'è un cerchio associato, evidenzialo
+    circle_row = intersection_circles(intersection_circles(:,1) == i, :);
+    if ~isempty(circle_row)
+        circle_idx = circle_row(2);
+        center_pos = centers(circle_idx, :);
+        radius = radii(circle_idx);
+        
+        viscircles(center_pos, radius, 'EdgeColor', 'green', 'LineWidth', 3);
+        plot([int_x, center_pos(1)], [int_y, center_pos(2)], 'g--', 'LineWidth', 1);
+        text(center_pos(1)+radius+5, center_pos(2)-10, sprintf('I%d', i), 'Color', 'green', 'FontWeight', 'bold');
+    end
+end
+
+hold off;
+title('Analisi completa: Cluster uniti, Centroidi e Intersezioni con Cerchi');
+legend('Rette', 'Centroidi', 'Tutti i cerchi', 'Cerchi nei centroidi', 'Intersezioni', 'Cerchi alle intersezioni', 'Location', 'best');
+
+% Riepilogo risultati
+fprintf('\n=== RIEPILOGO RISULTATI ===\n');
+fprintf('Cluster totali: %d\n', num_clusters);
+fprintf('Cluster uniti: %d\n', sum(merged_flags));
+fprintf('Cerchi trovati nei centroidi: %d\n', size(centroid_circles, 1));
+fprintf('Intersezioni calcolate: %d\n', size(intersection_points, 1));
+fprintf('Cerchi trovati alle intersezioni: %d\n', size(intersection_circles, 1));
 
 
-%% Da parte
+
+% %% Fase successiva: trovare i cerchi che siano presenti nell'area vicino ai punti delle intersezioni tra linee
 % 
-% % Inizializza array logico per cerchi validi
-% valid_circles = false(size(centers,1), 1);
+% % Identify the possible locations of the exam information (Both X or O)
+% % %Idea trovo dei possibili candidati che identificano aree dove potrebbero
+% % %esserci le X o O, dopodiché attraverso le rette che ho trovato
+% % %precedentemente escludo i cerchi che 
+% % Soluzion per trovare i cerchi nel grafico
+% [centers, radii, metric] = imfindcircles(BW,[7 25],"ObjectPolarity","bright","Method","PhaseCode");
 % 
-% % Per ogni cerchio trovato
-% for i = 1:size(centers,1)
-%     circle_center = centers(i,:);
-%     circle_radius = radii(i);
-% 
-%     % Controlla intersezione con tutte le linee
-%     for j = 1:size(punti_rette,1)
-%         % Estrai coordinate della linea
-%         x1 = punti_rette(j,1);
-%         y1 = punti_rette(j,2);
-%         x2 = punti_rette(j,3);
-%         y2 = punti_rette(j,4);
-% 
-%         % Calcola distanza minima tra centro cerchio e segmento
-%         [distance, ~] = point_to_line_segment(circle_center, [x1 y1], [x2 y2]);
-% 
-%         % Se la distanza è <= raggio, segna come valido
-%         if distance <= circle_radius
-%             valid_circles(i) = true;
-%             break % Interrompi il ciclo se trovato almeno una intersezione
-%         end
-%     end
-% end
-% 
-% % Filtra i cerchi
-% filtered_centers = centers(valid_circles,:);
-% filtered_radii = radii(valid_circles);
-% filtered_metric = metric(valid_circles);
-% 
-% figure;
-% imshow(BW);
-% viscircles(filtered_centers, filtered_radii, 'Color','r');
+% % DEBUG
+% figure;imshow(BW);
 % hold on;
-% for i = 1:size(punti_rette,1)
-%     plot(punti_rette(i,[1 3]), punti_rette(i,[2 4]), 'g-', 'LineWidth',2)
-% end
-% hold off;
+% viscircles(centers, radii,'EdgeColor','b');
 
-%% 
-% DEBUG
-% % Plot the binary image first
-% figure;
-% imshow(BW);
-% hold on;
-% 
-% % Define a colormap for different clusters
-% % Exclude the first color (reserved for noise points)
-% colors = hsv(num_clusters + 1);
-% cluster_colors = colors(2:end, :);
-% noise_color = [0.5 0.5 0.5]; % Gray for noise points
-% 
-% % Loop through each cluster and plot points with corresponding lines
-% for cluster_id = 1:num_clusters
-%     % Find indices of points in current cluster
-%     cluster_points = find(idx1 == cluster_id);
-% 
-%     % Plot centroids of current cluster
-%     scatter(centroids(cluster_points, 1), centroids(cluster_points, 2), 30, ...
-%             'MarkerFaceColor', cluster_colors(cluster_id,:), ...
-%             'MarkerEdgeColor', 'k', ...
-%             'LineWidth', 0.5, ...
-%             'Marker', 'o');
-% 
-%     % Plot lines of current cluster
-%     for i = 1:length(cluster_points)
-%         line_idx = cluster_points(i);
-%         pt1 = all_lines(line_idx).point1;
-%         pt2 = all_lines(line_idx).point2;
-% 
-%         % Draw the line with same color as the cluster
-%         line([pt1(1), pt2(1)], [pt1(2), pt2(2)], ...
-%              'Color', cluster_colors(cluster_id,:), ...
-%              'LineWidth', 2);
-%     end
-% end
-% 
-% % Plot noise points (idx1 == -1) and their lines if any
-% noise_points = find(idx1 == -1);
-% if ~isempty(noise_points)
-%     % Plot noise centroids
-%     scatter(centroids(noise_points, 1), centroids(noise_points, 2), 30, ...
-%             'MarkerFaceColor', noise_color, ...
-%             'MarkerEdgeColor', 'k', ...
-%             'LineWidth', 0.5, ...
-%             'Marker', 'x');
-% 
-%     % Plot noise lines
-%     for i = 1:length(noise_points)
-%         line_idx = noise_points(i);
-%         pt1 = all_lines(line_idx).point1;
-%         pt2 = all_lines(line_idx).point2;
-% 
-%         % Draw the line with noise color
-%         line([pt1(1), pt2(1)], [pt1(2), pt2(2)], ...
-%              'Color', noise_color, ...
-%              'LineWidth', 1, ...
-%              'LineStyle', '--');  % Dashed line for noise
-%     end
-% end
-% 
-% % Add a title and legend
-% title('DBSCAN Clustering Results with Lines on Binary Image');
-% 
-% 
-% hold off;
 
+
+% Funzione per verificare se c'è un cerchio in una posizione specifica
+% TODO: da ricontrollare la metrica di valutazione (non è meglio controllare che rientri nella grandezza del raggio ?)
+function [found, circle_idx, distance] = checkCircleAtPosition(pos_x, pos_y, centers, radii, tolerance)
+    if isempty(centers)
+        found = false;
+        circle_idx = -1;
+        distance = inf;
+        return;
+    end
+    
+    distances = sqrt((centers(:,1) - pos_x).^2 + (centers(:,2) - pos_y).^2);
+    [min_dist, min_idx] = min(distances);
+    
+    if min_dist <= tolerance
+        found = true;
+        circle_idx = min_idx;
+        distance = min_dist;
+    else
+        found = false;
+        circle_idx = -1;
+        distance = min_dist;
+    end
+end
