@@ -737,6 +737,10 @@ end
 % TODO da sistemare
 % Rimuovi linee con la stessa pendenza che siano troppo vicine tra loro
 
+% Array per tracciare i cluster fusi
+cluster_merged = false(num_clusters, 1); % Flag per cluster uniti
+merged_info = cell(num_clusters, 1);     % Informazioni sui cluster uniti
+
 % Parametri di tolleranza (regolabili)
 angle_threshold = 3;   % Gradi per differenza angolare massima
 distance_threshold = 100; % Pixel per distanza massima tra centroidi
@@ -765,6 +769,14 @@ for i = 1:num_clusters
         % Criterio di controllo sovrapposizione e vicinanza tra due linee
         if angle_diff <= angle_threshold || centroid_dist<=distance_threshold
 
+            % TRACCIA LA FUSIONE
+            cluster_merged(i) = true;
+            if isempty(merged_info{i})
+                merged_info{i} = j; % Prima fusione
+            else
+                merged_info{i} = [merged_info{i}, j]; % Aggiungi alla lista
+            end
+            
             updated_centroid = mean([new_centroids(i,:); new_centroids(j,:)]);
 
             theta_ottimali(i) = mean([theta_ottimali(i),theta_ottimali(j)]); % aggiorno   
@@ -795,6 +807,9 @@ end
 
 
 % Filtra le strutture dati mantenendo solo le linee non ridondanti
+merged_flags = cluster_merged(keep);  % Mantieni i flag di fusione
+merged_info_filtered = merged_info(keep);  % Mantieni le informazioni di fusione
+
 new_centroids = new_centroids(keep, :);
 punti_rette = punti_rette(keep, :);
 theta_ottimali = theta_ottimali(keep);
