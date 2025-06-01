@@ -912,12 +912,7 @@ point_intersec_x = [];
 % List of y coordinates of intersection points
 point_intersec_y = [];
 
-% % Trova i cerchi nell'immagine binaria
-% [centers, radii, metric] = imfindcircles(BW,[7 25],"ObjectPolarity","bright","Method","PhaseCode");
-
-% Array per memorizzare tutte le intersezioni
-line_circle_intersections = [];
-
+% DEBUG
 figure;
 imshow(BW);
 hold on;
@@ -959,6 +954,10 @@ for i = 1:num_clusters
 
     end
 
+    if i ==num_clusters
+        break;
+    end
+
     % Check intersections between line1 and the next line
     j = i+1;
     % Second line
@@ -977,10 +976,7 @@ hold off;
 title('Punti di intersezione tra le linee dei cluster');
 
 
-% % Combine coordinates in a new matrix 
-% intersections = [point_intersec_x(:) point_intersec_y(:)];
-
-
+%% Identificazione dei cerchi vicini o sovrapposti alle intersezioni
 
 % Verifica cerchi agli estremi delle intersezioni
 tolerance_intersection = 20; % Tolleranza per cerchi alle intersezioni
@@ -1000,104 +996,103 @@ for i = 1:size(intersection_points, 1)
     else
         % Ricerca del cerchio più vicino usando knnsearch
         [closest_idx, closest_dist] = knnsearch(centers, [int_x, int_y]);
+
+        % Update the intersection point with the center of the closest circle
+        circle_point= centers(closest_idx,:);
+
+        intersection_points(i,:) = [circle_point(1), circle_point(2), intersection_points(i,3), intersection_points(i,4)];
+
         fprintf('Intersezione %d: Cerchio più vicino %d a distanza %.2f\n', i, closest_idx, closest_dist);
         intersection_circles = [intersection_circles; i, closest_idx, closest_dist, int_x, int_y, line1_idx, line2_idx];
     end
 end
 
-% DEBUG
-% Visualizzazione completa
-figure;
-imshow(BW);
-hold on;
-
-% Disegna le rette con colori distinti
-colors = hsv(num_clusters);
-for i = 1:num_clusters
-    current_color = colors(i, :);
-    
-    % Linea più spessa se è stata unita
-    line_width =1;
-    if merged_flags(i)
-        line_width =3;
-    else 
-        line_width = 2;
-    end
-    plot(punti_rette(i, [1 3]), punti_rette(i, [2 4]), ...
-        'LineWidth', line_width, 'Color', current_color);
-    
-    % Centroide con marcatore speciale se unito
-    if merged_flags(i)
-        plot(new_centroids(i,1), new_centroids(i,2), ...
-            's', 'MarkerSize', 10, 'MarkerFaceColor', current_color, 'MarkerEdgeColor', 'k', 'LineWidth', 2);
-    else
-        plot(new_centroids(i,1), new_centroids(i,2), ...
-            'o', 'MarkerFaceColor', current_color, 'MarkerEdgeColor', 'k');
-    end
-end
-
-% Disegna tutti i cerchi in blu chiaro
-viscircles(centers, radii,'EdgeColor',[0.7 0.7 1], 'LineWidth', 1);
-
-% Evidenzia cerchi trovati nei centroidi
-for i = 1:size(centroid_circles, 1)
-    cluster_idx = centroid_circles(i, 1);
-    circle_idx = centroid_circles(i, 2);
-    center_pos = centers(circle_idx, :);
-    radius = radii(circle_idx);
-    
-    viscircles(center_pos, radius, 'EdgeColor', 'red', 'LineWidth', 3);
-    text(center_pos(1)+radius+5, center_pos(2), sprintf('C%d', cluster_idx), 'Color', 'red', 'FontWeight', 'bold');
-end
-
-% Evidenzia intersezioni e cerchi associati
-for i = 1:size(intersection_points, 1)
-    int_x = intersection_points(i, 1);
-    int_y = intersection_points(i, 2);
-    
-    % Punto di intersezione
-    plot(int_x, int_y, 'ro', 'MarkerSize', 8, 'MarkerFaceColor', 'yellow', 'MarkerEdgeColor', 'red', 'LineWidth', 2);
-    
-    % Se c'è un cerchio associato, evidenzialo
-    circle_row = intersection_circles(intersection_circles(:,1) == i, :);
-    if ~isempty(circle_row)
-        circle_idx = circle_row(2);
-        center_pos = centers(circle_idx, :);
-        radius = radii(circle_idx);
-        
-        viscircles(center_pos, radius, 'EdgeColor', 'green', 'LineWidth', 3);
-        plot([int_x, center_pos(1)], [int_y, center_pos(2)], 'g--', 'LineWidth', 1);
-        text(center_pos(1)+radius+5, center_pos(2)-10, sprintf('I%d', i), 'Color', 'green', 'FontWeight', 'bold');
-    end
-end
-
-hold off;
-title('Analisi completa: Cluster uniti, Centroidi e Intersezioni con Cerchi');
-legend('Rette', 'Centroidi', 'Tutti i cerchi', 'Cerchi nei centroidi', 'Intersezioni', 'Cerchi alle intersezioni', 'Location', 'best');
-
-% Riepilogo risultati
-fprintf('\n=== RIEPILOGO RISULTATI ===\n');
-fprintf('Cluster totali: %d\n', num_clusters);
-fprintf('Cluster uniti: %d\n', sum(merged_flags));
-fprintf('Cerchi trovati nei centroidi: %d\n', size(centroid_circles, 1));
-fprintf('Intersezioni calcolate: %d\n', size(intersection_points, 1));
-fprintf('Cerchi trovati alle intersezioni: %d\n', size(intersection_circles, 1));
 
 
-
-% %% Fase successiva: trovare i cerchi che siano presenti nell'area vicino ai punti delle intersezioni tra linee
-% 
-% % Identify the possible locations of the exam information (Both X or O)
-% % %Idea trovo dei possibili candidati che identificano aree dove potrebbero
-% % %esserci le X o O, dopodiché attraverso le rette che ho trovato
-% % %precedentemente escludo i cerchi che 
-% % Soluzion per trovare i cerchi nel grafico
-% [centers, radii, metric] = imfindcircles(BW,[7 25],"ObjectPolarity","bright","Method","PhaseCode");
-% 
 % % DEBUG
-% figure;imshow(BW);
+% % Visualizzazione completa
+% figure;
+% imshow(BW);
 % hold on;
-% viscircles(centers, radii,'EdgeColor','b');
+% 
+% % Disegna le rette con colori distinti
+% colors = hsv(num_clusters);
+% for i = 1:num_clusters
+%     current_color = colors(i, :);
+% 
+%     % Linea più spessa se è stata unita
+%     line_width =1;
+%     if merged_flags(i)
+%         line_width =3;
+%     else 
+%         line_width = 2;
+%     end
+%     plot(punti_rette(i, [1 3]), punti_rette(i, [2 4]), ...
+%         'LineWidth', line_width, 'Color', current_color);
+% 
+%     % Centroide con marcatore speciale se unito
+%     if merged_flags(i)
+%         plot(new_centroids(i,1), new_centroids(i,2), ...
+%             's', 'MarkerSize', 10, 'MarkerFaceColor', current_color, 'MarkerEdgeColor', 'k', 'LineWidth', 2);
+%     else
+%         plot(new_centroids(i,1), new_centroids(i,2), ...
+%             'o', 'MarkerFaceColor', current_color, 'MarkerEdgeColor', 'k');
+%     end
+% end
+% 
+% % Disegna tutti i cerchi in blu chiaro
+% viscircles(centers, radii,'EdgeColor',[0.7 0.7 1], 'LineWidth', 1);
+% 
+% % Evidenzia cerchi trovati nei centroidi
+% for i = 1:size(centroid_circles, 1)
+%     cluster_idx = centroid_circles(i, 1);
+%     circle_idx = centroid_circles(i, 2);
+%     center_pos = centers(circle_idx, :);
+%     radius = radii(circle_idx);
+% 
+%     viscircles(center_pos, radius, 'EdgeColor', 'red', 'LineWidth', 3);
+%     text(center_pos(1)+radius+5, center_pos(2), sprintf('C%d', cluster_idx), 'Color', 'red', 'FontWeight', 'bold');
+% end
+% 
+% % Evidenzia intersezioni e cerchi associati
+% for i = 1:size(intersection_points, 1)
+%     int_x = intersection_points(i, 1);
+%     int_y = intersection_points(i, 2);
+% 
+%     % Punto di intersezione
+%     plot(int_x, int_y, 'ro', 'MarkerSize', 8, 'MarkerFaceColor', 'yellow', 'MarkerEdgeColor', 'red', 'LineWidth', 2);
+% 
+%     % Se c'è un cerchio associato, evidenzialo
+%     circle_row = intersection_circles(intersection_circles(:,1) == i, :);
+%     if ~isempty(circle_row)
+%         circle_idx = circle_row(2);
+%         center_pos = centers(circle_idx, :);
+%         radius = radii(circle_idx);
+% 
+%         viscircles(center_pos, radius, 'EdgeColor', 'green', 'LineWidth', 3);
+%         plot([int_x, center_pos(1)], [int_y, center_pos(2)], 'g--', 'LineWidth', 1);
+%         text(center_pos(1)+radius+5, center_pos(2)-10, sprintf('I%d', i), 'Color', 'green', 'FontWeight', 'bold');
+%     end
+% end
+% 
+% hold off;
+% title('Analisi completa: Cluster uniti, Centroidi e Intersezioni con Cerchi');
+% legend('Rette', 'Centroidi', 'Tutti i cerchi', 'Cerchi nei centroidi', 'Intersezioni', 'Cerchi alle intersezioni', 'Location', 'best');
+% 
+% % Riepilogo risultati
+% fprintf('\n=== RIEPILOGO RISULTATI ===\n');
+% fprintf('Cluster totali: %d\n', num_clusters);
+% fprintf('Cluster uniti: %d\n', sum(merged_flags));
+% fprintf('Cerchi trovati nei centroidi: %d\n', size(centroid_circles, 1));
+% fprintf('Intersezioni calcolate: %d\n', size(intersection_points, 1));
+% fprintf('Cerchi trovati alle intersezioni: %d\n', size(intersection_circles, 1));
+% 
+
+%%
+
+
+
+%%
 
 
 
