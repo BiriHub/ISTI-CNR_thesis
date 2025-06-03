@@ -600,17 +600,50 @@ cropped_img = imcrop (grayImg, [x,y,refined_grid_points(2,1)- x, refined_grid_po
 filtered_img = imadjust(cropped_img);
 
 % Apply the Canny operator to obtain the binary edge map
-BW = edge(filtered_img, 'Canny');
+BW = edge(filtered_img, 'sobel');
+BW = bwareaopen(BW, 20);           % rimuove piccoli oggetti
 
-BW = imdilate(BW, strel('line',3,0)) | imdilate(BW,strel('line',3,90));
+% BW = imdilate(BW, strel('line',3,0)) | imdilate(BW,strel('line',3,90));
 
-BW = imdilate(BW, strel("rectangle",[2 6]));% Ottimale per trovare i O e X
 
-% BW= bwmorph(BW,'skeleton');
-BW = bwskel(BW);
+% figure ; imshow(BW);
+
+BW = imdilate(BW, strel("square",3));% Ottimale per trovare i O e X
+
+
+[centers, radii, metric] = imfindcircles(BW,[7 25],"ObjectPolarity","bright","Method","PhaseCode");
+
+BW_X = imbinarize(filtered_img);
 
 % DEBUG
-% figure ; imshow(BW);
+figure ; imshow(BW_X);
+
+
+I_closed = imclose(BW_X, strel("disk",3));
+I_closed = bwareaopen(not(I_closed),5);
+
+figure;
+imshow(I_closed);
+
+black_top_hat_result = I_closed - BW_X;
+
+figure;
+imshow(black_top_hat_result,[]);
+
+
+
+%%
+
+% BW= bwmorph(BW,'skeleton',Inf);
+% BW = bwskel(BW);
+
+% DEBUG
+figure ; imshow(BW);
+hold on;
+% Disegna i cerchi rilevati
+viscircles(centers, radii,'EdgeColor','b', 'LineWidth', 2);
+hold off;
+%%
 % Compute the Hough Transform
 [H, theta, rho] = hough(BW,'Theta',-85:-5);
 
