@@ -623,12 +623,19 @@ figure ; imshow(BW_edge);
 BW_binarized = imbinarize(filtered_img);
 
 
+
+BW_complem=imcomplement(BW_binarized);
+BW_binarized = bwskel(BW_complem);
+
+
 [centers, radii, metric] = imfindcircles(BW_binarized,[7 25],"ObjectPolarity","dark","Method","PhaseCode");
 
 [centers2, radii2, metric2] = imfindcircles(BW_binarized,[7 25],"ObjectPolarity","bright","Method","PhaseCode");
 
 % DEBUG
 figure ; imshow(BW_binarized);
+
+figure ; imshow(BW_complem);
 
 
 % I_closed = imclose(BW_X, strel("disk",3));
@@ -659,24 +666,24 @@ viscircles(centers2, radii2,'EdgeColor','r', 'LineWidth', 2);
 hold off;
 %%
 % Compute the Hough Transform
-[H, theta, rho] = hough(BW_edge,'Theta',-85:-5);
+[H, theta, rho] = hough(BW_binarized,'Theta',-85:-5);
 
-threshold = ceil(0.7 * max(H(:))); % Soglia più bassa per includere picchi meno prominenti
+threshold = ceil(0.5 * max(H(:))); % Soglia più bassa per includere picchi meno prominenti
 
 peaks = houghpeaks(H, 30,'Theta',-85:-5,'Threshold',threshold); % 40 for the maximum possible measurement case
 % Extract the detected lines based on the found peaks
-lines1 = houghlines(BW_edge, theta, rho, peaks,"MinLength",10,"FillGap",20);
+lines1 = houghlines(BW_binarized, theta, rho, peaks,"MinLength",10,"FillGap",20);
 
-[H, theta, rho] = hough(BW_edge,'Theta',5:85);
+[H, theta, rho] = hough(BW_binarized,'Theta',5:85);
 
 peaks = houghpeaks(H, 30,'Theta',5:85,'Threshold',threshold);
 % Extract the detected lines based on the found peaks
-lines2 = houghlines(BW_edge, theta, rho, peaks,"MinLength",10,"FillGap",20);
+lines2 = houghlines(BW_binarized, theta, rho, peaks,"MinLength",10,"FillGap",20);
 
 lines=[lines1, lines2];
 % DEBUG
 figure;
-imshow(BW_edge);
+imshow(BW_binarized);
 hold on;
 for k = 1:length(lines)
     xy = [lines(k).point1; lines(k).point2];
