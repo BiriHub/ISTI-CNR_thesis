@@ -609,35 +609,38 @@ cropped_img = imcrop (grayImg, [x,y,refined_grid_points(2,1)- x, refined_grid_po
 filtered_img = imadjust(cropped_img);
 
 % Apply the Canny operator to obtain the binary edge map
-BW = edge(filtered_img, 'sobel');
-BW = bwareaopen(BW, 20);           % rimuove piccoli oggetti
+BW_edge = edge(filtered_img, 'sobel');
+BW_edge = bwareaopen(BW_edge, 20);           % rimuove piccoli oggetti
 
 % BW = imdilate(BW, strel('line',3,0)) | imdilate(BW,strel('line',3,90));
 
 
-% figure ; imshow(BW);
+figure ; imshow(BW_edge);
 
-BW = imdilate(BW, strel("square",3));% Ottimale per trovare i O e X
+% BW_edge = imdilate(BW_edge, strel("square",3));% Ottimale per trovare i O e X
 
 
-[centers, radii, metric] = imfindcircles(BW,[7 25],"ObjectPolarity","bright","Method","PhaseCode");
+BW_binarized = imbinarize(filtered_img);
 
-BW_X = imbinarize(filtered_img);
+
+[centers, radii, metric] = imfindcircles(BW_binarized,[7 25],"ObjectPolarity","dark","Method","PhaseCode");
+
+[centers2, radii2, metric2] = imfindcircles(BW_binarized,[7 25],"ObjectPolarity","bright","Method","PhaseCode");
 
 % DEBUG
-figure ; imshow(BW_X);
+figure ; imshow(BW_binarized);
 
 
-I_closed = imclose(BW_X, strel("disk",3));
-I_closed = bwareaopen(not(I_closed),5);
-
-figure;
-imshow(I_closed);
-
-black_top_hat_result = I_closed - BW_X;
-
-figure;
-imshow(black_top_hat_result,[]);
+% I_closed = imclose(BW_X, strel("disk",3));
+% I_closed = bwareaopen(not(I_closed),5);
+% 
+% figure;
+% imshow(I_closed);
+% 
+% black_top_hat_result = I_closed - BW_X;
+% 
+% figure;
+% imshow(black_top_hat_result,[]);
 
 
 
@@ -647,31 +650,33 @@ imshow(black_top_hat_result,[]);
 % BW = bwskel(BW);
 
 % DEBUG
-figure ; imshow(BW);
+figure ; imshow(BW_binarized);
 hold on;
 % Disegna i cerchi rilevati
 viscircles(centers, radii,'EdgeColor','b', 'LineWidth', 2);
+viscircles(centers2, radii2,'EdgeColor','r', 'LineWidth', 2);
+
 hold off;
 %%
 % Compute the Hough Transform
-[H, theta, rho] = hough(BW,'Theta',-85:-5);
+[H, theta, rho] = hough(BW_edge,'Theta',-85:-5);
 
-threshold = ceil(0.6 * max(H(:))); % Soglia più bassa per includere picchi meno prominenti
+threshold = ceil(0.7 * max(H(:))); % Soglia più bassa per includere picchi meno prominenti
 
-peaks = houghpeaks(H, 60,'Theta',-85:-5,'Threshold',threshold); % 40 for the maximum possible measurement case
+peaks = houghpeaks(H, 30,'Theta',-85:-5,'Threshold',threshold); % 40 for the maximum possible measurement case
 % Extract the detected lines based on the found peaks
-lines1 = houghlines(BW, theta, rho, peaks,"MinLength",50,"FillGap",20);
+lines1 = houghlines(BW_edge, theta, rho, peaks,"MinLength",10,"FillGap",20);
 
-[H, theta, rho] = hough(BW,'Theta',5:85);
+[H, theta, rho] = hough(BW_edge,'Theta',5:85);
 
-peaks = houghpeaks(H, 60,'Theta',5:85,'Threshold',threshold);
+peaks = houghpeaks(H, 30,'Theta',5:85,'Threshold',threshold);
 % Extract the detected lines based on the found peaks
-lines2 = houghlines(BW, theta, rho, peaks,"MinLength",50,"FillGap",20);
+lines2 = houghlines(BW_edge, theta, rho, peaks,"MinLength",10,"FillGap",20);
 
 lines=[lines1, lines2];
 % DEBUG
 figure;
-imshow(BW);
+imshow(BW_edge);
 hold on;
 for k = 1:length(lines)
     xy = [lines(k).point1; lines(k).point2];
@@ -897,33 +902,36 @@ for i = 1:num_clusters
     end
 end
 
+% TODO: centroid_circles contiene la posizione dei centri dei cerchi che
+% passano nel mezzo a merged cluster 
 
 
-% %DEBUG
-% % Visualizzazione con colori distinti
-% figure; 
-% imshow(BW); 
-% hold on;
-% 
-% % Genera una matrice di colori unici (una riga per cluster)
-% colors = hsv(num_clusters); % Usa la mappa di colori "hsv"
-% 
-% for i = 1:num_clusters
-%     % Estrai il colore per il cluster corrente
-%     current_color = colors(i, :);
-% 
-%     % Disegna la linea del cluster
-%     plot(punti_rette(i, [1 3]), punti_rette(i, [2 4]), ...
-%         'LineWidth', 2, 'Color', current_color);
-% 
-%     % Disegna il centroide selezionato
-%     plot(new_centroids(i,1), new_centroids(i,2), ...
-%         'o', 'MarkerFaceColor', current_color, 'MarkerEdgeColor', 'k');
-% end
-% 
-% hold off;
-% title('Cluster con colori distinti');
-% 
+
+%DEBUG
+% Visualizzazione con colori distinti
+figure; 
+imshow(BW_edge); 
+hold on;
+
+% Genera una matrice di colori unici (una riga per cluster)
+colors = hsv(num_clusters); % Usa la mappa di colori "hsv"
+
+for i = 1:num_clusters
+    % Estrai il colore per il cluster corrente
+    current_color = colors(i, :);
+
+    % Disegna la linea del cluster
+    plot(punti_rette(i, [1 3]), punti_rette(i, [2 4]), ...
+        'LineWidth', 2, 'Color', current_color);
+
+    % Disegna il centroide selezionato
+    plot(new_centroids(i,1), new_centroids(i,2), ...
+        'o', 'MarkerFaceColor', current_color, 'MarkerEdgeColor', 'k');
+end
+
+hold off;
+title('Cluster con colori distinti');
+
 
 
 %% Trovo le intersezioni tra le linee dei cluster
@@ -1054,7 +1062,7 @@ end
 % % DEBUG
 % % Visualizzazione completa
 % figure;
-% imshow(BW);
+% imshow(BW_edge);
 % hold on;
 % 
 % % Disegna le rette con colori distinti
