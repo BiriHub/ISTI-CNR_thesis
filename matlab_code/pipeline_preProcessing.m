@@ -628,9 +628,9 @@ BW_complem=imcomplement(BW_binarized);
 BW_binarized = bwskel(BW_complem);
 
 
-[centers, radii, metric] = imfindcircles(BW_binarized,[7 25],"ObjectPolarity","dark","Method","PhaseCode");
+[centers, radii, metric] = imfindcircles(BW_binarized,[6 25],"ObjectPolarity","dark","Method","PhaseCode");
 
-[centers2, radii2, metric2] = imfindcircles(BW_binarized,[7 25],"ObjectPolarity","bright","Method","PhaseCode");
+[centers2, radii2, metric2] = imfindcircles(BW_binarized,[6 25],"ObjectPolarity","bright","Method","PhaseCode");
 
 % DEBUG
 figure ; imshow(BW_binarized);
