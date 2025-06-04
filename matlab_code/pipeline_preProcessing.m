@@ -278,13 +278,14 @@ max_num_horiz_lines = 16;
 max_num_vert_lines  = 15;
 
 filteredLines = [];
-angleThreshold = 1; % angle threshold
+angleThreshold = 2; % angle threshold
 
 horizontal_lines= zeros(max_num_horiz_lines,4); 
 vertical_lines= zeros(max_num_vert_lines,4);
 
 h=1;
 v=1;
+incr=30;
 for i = 1:length(lines)
     currentTheta = lines(i).theta;
     
@@ -298,11 +299,19 @@ for i = 1:length(lines)
     tmp= [lines(i).point1,lines(i).point2];
     % Save only the horizontal or vertical lines
     if isHorizontal && ~checkIntersection(tmp,grid_corner_lines(1),grid_corner_lines(3))
+        % Adjust x-coord with the difference between the right grid corner
+        % coordinates
+        lines(i).point2(1) = lines(i).point2(1) + (abs(lines(i).point2(1)-min(grid_corner_lines(4).point1(1),grid_corner_lines(4).point1(1)))); % needed for next phase
+
         horizontal_lines(h,:)=tmp;
         filteredLines = [filteredLines; lines(i)];
         h=h+1;
     elseif isVertical && ~checkIntersection(tmp,grid_corner_lines(2),grid_corner_lines(4))
-        vertical_lines(v,:) = tmp;
+        % Adjust y-coord with the difference between the upper grid corner
+        % coordinates
+        lines(i).point1(2) = lines(i).point1(2) - (abs(lines(i).point1(2)-min(grid_corner_lines(1).point1(2),grid_corner_lines(1).point2(2)))); % needed for next phase
+
+        vertical_lines(v,:) = [lines(i).point1,lines(i).point2];
         filteredLines = [filteredLines; lines(i)];
         v=v+1;
     end
@@ -387,13 +396,13 @@ end
 % Idea: for each horizontal line I look for the intersection points between
 % the vertical segments that pass through it
 
-for i = 1:length(horizontal_lines)
+for i = 1:size(horizontal_lines,1)
 
     % Horizontal segment
     seg1_x = [horizontal_lines(i,1), horizontal_lines(i,3)];
     seg1_y = [horizontal_lines(i,2), horizontal_lines(i,4)];
     
-    for j=1:length(vertical_lines)
+    for j=1:size(vertical_lines,1)
         % All vertical segments
         seg2_x = [vertical_lines(j,1), vertical_lines(j,3)];
         seg2_y = [vertical_lines(j,2),vertical_lines(j,4)];
