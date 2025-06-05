@@ -649,6 +649,105 @@ viscircles(centers, radii,'EdgeColor','b', 'LineWidth', 2);
 viscircles(centers2, radii2,'EdgeColor','r', 'LineWidth', 2);
 
 hold off;
+
+%%
+
+line_length = 25;     % Cerchiamo segmenti diagonali lunghi 9 pixel
+threshold   = 12;     % Impostiamo soglia = lunghezza (corrispondenza esatta)
+
+% 4. Lancio la funzione
+matches = crossPatternMatchingBinary(BW_binarized, line_length, threshold);
+
+% 5. Visualizzo le coordinate trovate
+disp('Coordinate (x,y) dei centri delle croci rilevate:');
+disp(matches);
+
+
+epsilon = 8;    % raggio massimo (in pixel) per considerare due punti 1vicini"
+MinPts  = 3;    % numero minimo di punti per formare un cluster
+
+% --- STEP 3: Esegui DBSCAN sui punti `matches` ---
+% La funzione dbscan è inclusa nel toolbox Statistics and Machine Learning di MATLAB.
+% IDX sarà un vettore di lunghezza N, contenente per ciascun punto:
+%  - un intero k ≥ 1 se il punto appartiene al cluster k
+%  - il valore -1 se il punto è considerato “rumore” (outlier)
+%
+% NB: Assicurati di avere il toolbox Statistics and Machine Learning installato.
+[idx, isCorePoint] = dbscan(matches, epsilon, MinPts);
+
+% --- STEP 4: Analisi dei risultati ---
+% Visualizziamo a video quanti cluster sono stati trovati (escludendo il -1)
+clusterLabels = unique(idx);
+clusterLabels(clusterLabels == -1) = [];   % togliamo il rumore (-1)
+nClusters = numel(clusterLabels);
+fprintf('Trovati %d cluster (con almeno %d punti ciascuno).\n', nClusters, MinPts);
+
+% Per ciascun cluster, estraiamo le coordinate:
+clusters = cell(nClusters,1);
+for k = 1:nClusters
+    label = clusterLabels(k);
+    clusters{k} = matches(idx == label, :);
+    fprintf('Cluster %d: %d punti\n', label, size(clusters{k},1));
+end
+
+nNoisy = sum(idx == -1);
+fprintf('Punti considerati rumore (non assegnati a nessun cluster): %d\n', nNoisy);
+
+% 1. Trova i cluster effettivi (escludendo l’etichetta -1)
+allLabels = unique(idx);
+clusterLabels = allLabels(allLabels ~= -1);   % togliamo -1
+nClusters = numel(clusterLabels);
+
+% 2. Prealloca la matrice per i centroidi
+%    Ogni riga conterrà [centroide_x, centroide_y] di un cluster
+centroids = zeros(nClusters, 2);
+
+% 3. Calcola il centroide per ogni cluster
+for k = 1:nClusters
+    label = clusterLabels(k);
+    
+    % Estrai i punti del cluster k
+    pts = matches(idx == label, :);   % M×2
+    
+    % Centroide = media delle coordinate (colonna 1 = x, colonna 2 = y)
+    centroids(k,1) = mean(pts(:,1));   % centroide x
+    centroids(k,2) = mean(pts(:,2));   % centroide y
+end
+
+% 4. Visualizza i centroidi
+fprintf('Centroide di ciascun cluster trovato:\n');
+for k = 1:nClusters
+    fprintf('  Cluster %d → Centroide (x,y) = (%.2f, %.2f)\n', ...
+            clusterLabels(k), centroids(k,1), centroids(k,2));
+end
+
+% --- Opzionale: sovrapponi i centroidi alla visualizzazione precedente ---
+figure; 
+imshow(BW_binarized); hold on;
+
+% Plotta tutti i punti dei cluster (come prima)
+colors = hsv(nClusters);
+for k = 1:nClusters
+    label = clusterLabels(k);
+    clusterPts = matches(idx == label, :);
+    scatter(clusterPts(:,1), clusterPts(:,2), 50, ...
+            'MarkerEdgeColor', colors(k,:), ...
+            'MarkerFaceColor', colors(k,:), ...
+            'DisplayName', sprintf('Cluster %d', label));
+end
+
+% Plotta i centroidi con un marker a croce rosso più grande
+scatter(centroids(:,1), centroids(:,2), 100, ...
+        'r', 'x', 'LineWidth', 2, ...
+        'DisplayName', 'Centroidi');
+
+axis ij;  % per far corrispondere gli assi alle coordinate immagine
+xlabel('X [pixel]');
+ylabel('Y [pixel]');
+legend('Location','bestoutside');
+title('Cluster e relativi centroidi');
+hold off;
+
  %%
 
 
@@ -1212,3 +1311,62 @@ end
 %         distance = min_dist;
 %     end
 % end
+function matchesCross = crossPatternMatchingBinary(binaryImg, line_length, threshold)
+    % crossPatternMatchingBinary   Rileva pattern a forma di croce (X) in un'immagine binaria
+    %
+    % Sintassi:
+    %   matchesCross = crossPatternMatchingBinary(binaryImg, line_length, threshold)
+    %
+    % Input:
+    %   - binaryImg: immagine 2D già binaria (valori 0 o 1). Se non è logica, viene
+    %                binarizzata tramite imbinarize.
+    %   - line_length: lunghezza (in pixel) del lato del quadrato che forma la croce.
+    %                  Es.: per rilevare una “X” di 9×9 pixel, impostare line_length = 9.
+    %   - threshold: soglia minima di somma dei pixel sovrapposti.  
+    %                Poiché la croce occupa 2·line_length–1 pixel a 1, impostare
+    %                threshold = 2·line_length–1 per corrispondenza esatta.
+    %                Se si vuole tollerare qualche “buco” o rumore, si può ridurre leggermente.
+    %
+    % Output:
+    %   - matchesCross: matrice Nx2 con le coordinate (x, y) dei punti in cui il
+    %                   template a croce ha risposto ≥ threshold. Ciascuna riga è [x, y].
+    %
+    % -------------------------------------------------------------------------
+    % Esempio d’uso:
+    %   I = imread('quadro_binario.png');
+    %   I = imbinarize(I);
+    %   [MC] = crossPatternMatchingBinary(I, 7, 13);
+    %   % Visualizza i punti rilevati:
+    %   disp(MC);
+    % -------------------------------------------------------------------------
+
+    % Verifica dimensione e binarità
+    if ndims(binaryImg) ~= 2
+        error('L''input deve essere un''immagine 2D già binaria.');
+    end
+    if ~islogical(binaryImg)
+        binaryImg = imbinarize(binaryImg);
+    end
+
+    % Costruisci il template a forma di croce (X) di dimensione line_length × line_length:
+    % - eye(n) crea la diagonale principale (45°)
+    % - fliplr(eye(n)) crea la diagonale secondaria (135°)
+    % Sommandole (>0) otteniamo 1 sulle due diagonali, 0 altrove.
+    e = eye(line_length);
+    templateCross = (e + fliplr(e)) > 0;  
+    % templateCross è una matrice logica con 1 nelle posizioni delle due diagonali.
+
+    % Convoluzione 2D (stessa dimensione dell’immagine):
+    % La risposta in ogni punto (i,j) è quante posizioni “1” del template si sovrappongono a pixel 1 nell’immagine.
+    corrCross = conv2(double(binaryImg), double(templateCross), 'same');
+
+    % Trova coordinate in cui la somma dei pixel sovrapposti ≥ threshold
+    [yC, xC] = find(corrCross >= threshold);
+    matchesCross = [xC, yC];
+
+    % Visualizzazione (opzionale)
+    figure; imshow(binaryImg); hold on;
+    plot(matchesCross(:,1), matchesCross(:,2), 'md', 'MarkerSize', 10, 'LineWidth', 2);
+    legend('Croce');
+    title(sprintf('Rilevate %d croci (X) con soglia ≥ %d', size(matchesCross,1), threshold));
+end
