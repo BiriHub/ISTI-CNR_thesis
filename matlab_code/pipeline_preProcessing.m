@@ -476,7 +476,10 @@ end
 % Frequency
 upper_corner=max(grid_corner_lines(1).point1(2),grid_corner_lines(1).point2(2));
 idx = intersectionPoints(:,2) <= upper_corner;
-freq_points = sortrows(intersectionPoints(idx,:));
+
+freq_points= zeros(size(intersectionPoints(idx,:),1),3);
+freq_points(:,1:2) = sortrows(intersectionPoints(idx,:));
+
 if size(freq_points,1) ~= 13
     throw(MException('sizeError:Error','The number of points is not sufficient'));
 end
@@ -516,7 +519,7 @@ for i = 1:size(freq_points,1)
     
     % Perform OCR
     freq_ocr_results{i} = ocr(img, ocr_area, 'LayoutAnalysis', 'Block', 'CharacterSet', "0124568k");
-    if length(freq_ocr_results{i}.Words)<1 
+    if length(freq_ocr_results{i}.Words)<1
         continue;
     end
 
@@ -534,6 +537,10 @@ for i = 1:size(freq_points,1)
     % Optional: Draw the rectangle connecting the corners
     rectangle('Position', ocr_area, 'EdgeColor', 'r');
 end
+
+% Remove noise
+
+
 
 % Decibel axis
 left_corner=max(grid_corner_lines(2).point1(1),grid_corner_lines(2).point2(1));
