@@ -538,9 +538,6 @@ for i = 1:size(freq_points,1)
     rectangle('Position', ocr_area, 'EdgeColor', 'r');
 end
 
-% Remove noise
-
-
 
 % Decibel axis
 left_corner=max(grid_corner_lines(2).point1(1),grid_corner_lines(2).point2(1));
@@ -603,6 +600,13 @@ hold off;
 
 
 
+% Remove noise
+
+% Frequencies 
+freq_ocr_results = ocrTextNoisyRemove(freq_ocr_results);
+
+% Decibels
+dB_ocr_results = ocrTextNoisyRemove(dB_ocr_results);
 
 
 %% % FINAL PART
