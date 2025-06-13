@@ -251,7 +251,6 @@ grid_corner_lines(4) = struct('point1', refined_grid_points(2,:), 'point2', refi
 % validity,it aims to identify the
 
 
-
 % Apply the Canny operator to obtain the binary edge map
 bin_img = edge(grayImg, 'Canny');
 
@@ -271,6 +270,21 @@ peaks = houghpeaks(H, 31, 'threshold', ceil(0.01 * max(H(:))));
 lines = houghlines(edgeMap, theta, rho, peaks, 'FillGap', 150, 'MinLength', 150);
 
 
+% % DEBUG x hough result
+% figure;
+% imshow(img);
+% hold on;
+% for k = 1:length(lines)
+% xy = [lines(k).point1; lines(k).point2];
+% plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', 'green');
+% % Display the starting and ending points of the lines
+% plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
+% plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
+% end
+% title('Filtered Lines detected with the Hough Transform');
+% hold off;
+
+%%
 % Filter all lines that are not neither horizontal nor vertical according
 % to a threshold
 
@@ -333,7 +347,6 @@ if not(isempty(firstEmptyRowIdx))
 end
 
 
-
 % % DEBUG
 % figure;
 % imshow(img);
@@ -381,7 +394,6 @@ for i = 1:length(grid_corner_lines)
         
         % Calcola l'intersezione tra le due linee
         [xi, yi] = polyxpoly(seg1_x, seg1_y, seg2_x, seg2_y);
-        
         if ~isempty(xi)
             % Salva l'intersezione (se polyxpoly restituisce più punti, prendi il primo)
             intersectionPoints(k, :) = [xi(1), yi(1)];
@@ -449,24 +461,25 @@ end
 % Optimize the size
 intersectionPoints = intersectionPoints(1:k-1, :);
 % 
+
 % DEGUB
-figure, imshow(grayImg), hold on;
-
-plot(intersectionPoints(:,1), intersectionPoints(:,2), 'ro', 'MarkerSize', 4, 'LineWidth', 1);
-
-title('Grid intersection points');
-
-
-for i = 1:length(grid_corner_lines)
-    % Punto 1 della linea
-    x_pt1 = grid_corner_lines(i).point1(1);
-    y_pt1 = grid_corner_lines(i).point1(2);
-    plot(x_pt1, y_pt1, 'bs', 'MarkerSize', 4, 'LineWidth', 1);    
-    % Punto 2 della linea
-    x_pt2 = grid_corner_lines(i).point2(1);
-    y_pt2 = grid_corner_lines(i).point2(2);
-    plot(x_pt2, y_pt2, 'bs', 'MarkerSize', 4, 'LineWidth', 1);
-end
+% figure; imshow(grayImg), hold on;
+% 
+% plot(intersectionPoints(:,1), intersectionPoints(:,2), 'ro', 'MarkerSize', 4, 'LineWidth', 1);
+% 
+% title('Grid intersection points');
+% 
+% 
+% for i = 1:length(grid_corner_lines)
+%     % Punto 1 della linea
+%     x_pt1 = grid_corner_lines(i).point1(1);
+%     y_pt1 = grid_corner_lines(i).point1(2);
+%     plot(x_pt1, y_pt1, 'bs', 'MarkerSize', 4, 'LineWidth', 1);    
+%     % Punto 2 della linea
+%     x_pt2 = grid_corner_lines(i).point2(1);
+%     y_pt2 = grid_corner_lines(i).point2(2);
+%     plot(x_pt2, y_pt2, 'bs', 'MarkerSize', 4, 'LineWidth', 1);
+% end
 
 %% OCR IMPROVEMENT
 
@@ -486,8 +499,21 @@ end
 
 % Initialize array to store OCR results for the frequency axis
 freq_ocr_results = cell(size(freq_points,1), 1);
-%DEBUG
-figure, imshow(grayImg);
+
+% Prepare the image for the ocr
+adj_img = imadjust(grayImg);
+
+% Applica filtro per ridurre rumore
+filt_adj_img = medfilt2(adj_img, [3 3]);
+
+% Binarizzazione adattiva
+BW_adj_img = imbinarize(filt_adj_img);
+
+% Rimuovi piccoli oggetti (rumore)
+improved_ocr_img = bwareaopen(BW_adj_img, 50);
+
+% %DEBUG
+figure, imshow(improved_ocr_img);
 
 % Process OCR for each point in freq_points
 for i = 1:size(freq_points,1)
@@ -518,7 +544,7 @@ for i = 1:size(freq_points,1)
     ocr_area = [point1(1), 1, width_ocr_area, point1(2) - 1];
     
     % Perform OCR
-    freq_ocr_results{i} = ocr(img, ocr_area, 'LayoutAnalysis', 'Block', 'CharacterSet', "0124568k");
+    freq_ocr_results{i} = ocr(improved_ocr_img, ocr_area, 'LayoutAnalysis', 'Block', 'CharacterSet', "0124568k");
     if length(freq_ocr_results{i}.Words)<1
         continue;
     end
@@ -577,8 +603,8 @@ for i = 1:size(dB_points,1)
         rectangle('Position', ocr_area, 'EdgeColor', 'r');
 
     % Perform OCR
-    dB_ocr_results{i} = ocr(img, ocr_area, 'LayoutAnalysis', 'Block', 'CharacterSet', "0124568k");
-
+    dB_ocr_results{i} = ocr(improved_ocr_img, ocr_area, 'LayoutAnalysis', 'Block', 'CharacterSet', "-0123456789k");
+    dB_ocr_results{i}.Text
     % Plot corners of the OCR area
     % Top-left corner
     plot(ocr_area(1), ocr_area(2), 'bs', 'MarkerSize', 4, 'LineWidth', 1);
@@ -598,12 +624,10 @@ end
 hold off;
 
 
-
-
-% Remove noise
+% Remove noise in the ocr results
 
 % Frequencies 
-freq_ocr_results = ocrTextNoisyRemove(freq_ocr_results);
+[freq_ocr_results, labeled_idx ]= ocrTextNoisyRemove(freq_ocr_results);
 
 % Decibels
 dB_ocr_results = ocrTextNoisyRemove(dB_ocr_results);
