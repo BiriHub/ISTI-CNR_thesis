@@ -877,6 +877,24 @@ exam_points(:,4) = dB_values(idx_dB);
 
 
 
+%% Save examination information on a CSV file
+
+% Get the path of the current folder (where the script/project is located)
+project_folder = pwd;
+
+% Build the full file path
+filename = fullfile(project_folder, 'exam_points.csv');
+
+% Create a table with column names
+data_table = array2table(exam_points(:,3:4), ...
+    'VariableNames', {'Frequency_Hz', 'dB_level'});
+
+% Save the table in CSV format
+writetable(data_table, filename);
+
+% Confirmation message
+disp(['File successfully saved: ' filename]);
+
 
 
 function matchesCross = crossPatternMatchingBinary(binaryImg, line_length, threshold)
