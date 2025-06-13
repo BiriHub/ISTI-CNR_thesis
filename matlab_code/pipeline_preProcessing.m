@@ -299,7 +299,6 @@ vertical_lines= zeros(max_num_vert_lines,4);
 
 h=1;
 v=1;
-incr=30;
 for i = 1:length(lines)
     currentTheta = lines(i).theta;
     
@@ -568,7 +567,10 @@ end
 % Decibel axis
 left_corner=max(grid_corner_lines(2).point1(1),grid_corner_lines(2).point2(1));
 idx = intersectionPoints(:,1) <= left_corner;
-dB_points = sortrows(intersectionPoints(idx,:));
+
+dB_points= zeros(size(intersectionPoints(idx,:),1),3);
+dB_points(:,1:2) = sortrows(intersectionPoints(idx,:));
+
 if size(dB_points,1) ~= 14
     throw(MException('sizeError:Error','The number of points is not sufficient'));
 end
@@ -627,11 +629,12 @@ hold off;
 % Remove noise in the ocr results
 
 % Frequencies 
-[freq_ocr_results, labeled_idx ]= ocrTextNoisyRemove(freq_ocr_results);
+[freq_ocr_results, freq_labeled_list]= ocrTextNoisyRemove(freq_ocr_results);
+freq_points(:,3)=freq_labeled_list;
 
 % Decibels
-dB_ocr_results = ocrTextNoisyRemove(dB_ocr_results);
-
+[dB_ocr_results, dB_labeled_list]= ocrTextNoisyRemove(dB_ocr_results);
+dB_points(:,3)=dB_labeled_list;
 
 %% % FINAL PART
 % 1. Extract information with Hough
@@ -669,8 +672,9 @@ viscircles(centers2, radii2,'EdgeColor','r', 'LineWidth', 2);
 
 hold off;
 
- %%
 
+ % List of the point coordinates in the grid
+ cropped_exam_points=[];
 
 % Inizializza array per i centri dei cerchi bianchi sovrapposti
 overlapping_bright_centers = [];
@@ -705,16 +709,18 @@ if ~isempty(centers) && ~isempty(centers2)
 end
 
 
-% DEBUG
-% Risultato: overlapping_bright_centers contiene le coordinate dei centri
-% dei cerchi bianchi che si sovrappongono con almeno un cerchio scuro
-if ~isempty(overlapping_bright_centers)
-    fprintf('Trovati %d cerchi bianchi sovrapposti\n', size(overlapping_bright_centers, 1));
-    fprintf('Coordinate dei centri:\n');
-    disp(overlapping_bright_centers);
-else
-    fprintf('Nessun cerchio bianco sovrapposto trovato\n');
-end
+% % DEBUG
+% % Risultato: overlapping_bright_centers contiene le coordinate dei centri
+% % dei cerchi bianchi che si sovrappongono con almeno un cerchio scuro
+% if ~isempty(overlapping_bright_centers)
+%     fprintf('Trovati %d cerchi bianchi sovrapposti\n', size(overlapping_bright_centers, 1));
+%     fprintf('Coordinate dei centri:\n');
+%     disp(overlapping_bright_centers);
+% else
+%     fprintf('Nessun cerchio bianco sovrapposto trovato\n');
+% end
+
+cropped_exam_points=[];
 
 if isempty(overlapping_bright_centers) || size(overlapping_bright_centers,1)< 4 % According to the minimum number of frequencies 
     % The image contains X, not O
@@ -734,12 +740,6 @@ if isempty(overlapping_bright_centers) || size(overlapping_bright_centers,1)< 4 
     MinPts  = 1;    % numero minimo di punti per formare un cluster
     
     % --- STEP 3: Esegui DBSCAN sui punti `matches` ---
-    % La funzione dbscan è inclusa nel toolbox Statistics and Machine Learning di MATLAB.
-    % IDX sarà un vettore di lunghezza N, contenente per ciascun punto:
-    %  - un intero k ≥ 1 se il punto appartiene al cluster k
-    %  - il valore -1 se il punto è considerato “rumore” (outlier)
-    %
-    % NB: Assicurati di avere il toolbox Statistics and Machine Learning installato.
     [idx, isCorePoint] = dbscan(matches, epsilon, MinPts);
     
     % --- STEP 4: Analisi dei risultati ---
@@ -757,8 +757,8 @@ if isempty(overlapping_bright_centers) || size(overlapping_bright_centers,1)< 4 
         fprintf('Cluster %d: %d punti\n', label, size(clusters{k},1));
     end
     
-    nNoisy = sum(idx == -1);
-    fprintf('Punti considerati rumore (non assegnati a nessun cluster): %d\n', nNoisy);
+    % nNoisy = sum(idx == -1);
+    % fprintf('Punti considerati rumore (non assegnati a nessun cluster): %d\n', nNoisy);
     
     % 1. Trova i cluster effettivi (escludendo l’etichetta -1)
     allLabels = unique(idx);
@@ -774,12 +774,16 @@ if isempty(overlapping_bright_centers) || size(overlapping_bright_centers,1)< 4 
         label = clusterLabels(k);
         
         % Estrai i punti del cluster k
-        pts = matches(idx == label, :);   % M×2
+        pts = matches(idx == label, :);
         
         % Centroide = media delle coordinate (colonna 1 = x, colonna 2 = y)
         centroids(k,1) = mean(pts(:,1));   % centroide x
         centroids(k,2) = mean(pts(:,2));   % centroide y
     end
+
+    % Assign result
+    cropped_exam_points = zeros(size(centroids,1),4);
+    cropped_exam_points(:,1:2)=centroids;
     
     % DEBUG
     fprintf('Centroide di ciascun cluster trovato:\n');
@@ -788,34 +792,56 @@ if isempty(overlapping_bright_centers) || size(overlapping_bright_centers,1)< 4 
                 clusterLabels(k), centroids(k,1), centroids(k,2));
     end
     
-    % DEBUG
-    figure; 
-    imshow(BW_binarized); hold on;
-    
-    % Plotta tutti i punti dei cluster (come prima)
-    colors = hsv(nClusters);
-    for k = 1:nClusters
-        label = clusterLabels(k);
-        clusterPts = matches(idx == label, :);
-        scatter(clusterPts(:,1), clusterPts(:,2), 50, ...
-                'MarkerEdgeColor', colors(k,:), ...
-                'MarkerFaceColor', colors(k,:), ...
-                'DisplayName', sprintf('Cluster %d', label));
-    end
-    
-    % Plotta i centroidi con un marker a croce rosso più grande
-    scatter(centroids(:,1), centroids(:,2), 100, ...
-            'r', 'x', 'LineWidth', 2, ...
-            'DisplayName', 'Centroidi');
-    
-    axis ij;  % per far corrispondere gli assi alle coordinate immagine
-    xlabel('X [pixel]');
-    ylabel('Y [pixel]');
-    legend('Location','bestoutside');
-    title('Cluster e relativi centroidi');
-    hold off;
+    % % DEBUG
+    % figure; 
+    % imshow(BW_binarized); hold on;
+    % 
+    % % Plotta tutti i punti dei cluster (come prima)
+    % colors = hsv(nClusters);
+    % for k = 1:nClusters
+    %     label = clusterLabels(k);
+    %     clusterPts = matches(idx == label, :);
+    %     scatter(clusterPts(:,1), clusterPts(:,2), 50, ...
+    %             'MarkerEdgeColor', colors(k,:), ...
+    %             'MarkerFaceColor', colors(k,:), ...
+    %             'DisplayName', sprintf('Cluster %d', label));
+    % end
+    % 
+    % % Plotta i centroidi con un marker a croce rosso più grande
+    % scatter(centroids(:,1), centroids(:,2), 100, ...
+    %         'r', 'x', 'LineWidth', 2, ...
+    %         'DisplayName', 'Centroidi');
+    % 
+    % axis ij;  % per far corrispondere gli assi alle coordinate immagine
+    % xlabel('X [pixel]');
+    % ylabel('Y [pixel]');
+    % legend('Location','bestoutside');
+    % title('Cluster e relativi centroidi');
+    % hold off;
 
+else
+    % Assign result
+    cropped_exam_points = zeros(size(overlapping_bright_centers,1),4);
+    cropped_exam_points(:,1:2) = overlapping_bright_centers;
 end
+
+
+%%
+
+% Restore the coordinates to the original image
+exam_points = cropped_exam_points;
+exam_points(:,1) = exam_points(:,1) + x;
+exam_points(:,2) = exam_points(:,2) + y;
+
+freq_values = freq_points(:,3);
+
+% Assign the closest frequency value to each point
+[~, idx_freq] = min(abs(exam_points(:,1) - freq_points(:,1)'), [], 2);
+
+exam_points(:,3) = freq_values(idx_freq);
+
+
+
 
 
 
@@ -889,13 +915,13 @@ function matchesCross = crossPatternMatchingBinary(binaryImg, line_length, thres
     
     matchesCross = validMatches;
 
-    % Visualizzazione (opzionale)
-    if ~isempty(matchesCross)
-        figure; 
-        imshow(binaryImg); 
-        hold on;
-        plot(matchesCross(:,1), matchesCross(:,2), 'md', 'MarkerSize', 10, 'LineWidth', 2);
-        legend('Croce verificata');
-        title(sprintf('Rilevate %d croci (soglia: %d)', size(matchesCross,1), threshold));
-    end
+    % % DEBUG
+    % if ~isempty(matchesCross)
+    %     figure; 
+    %     imshow(binaryImg); 
+    %     hold on;
+    %     plot(matchesCross(:,1), matchesCross(:,2), 'md', 'MarkerSize', 10, 'LineWidth', 2);
+    %     legend('Croce verificata');
+    %     title(sprintf('Rilevate %d croci (soglia: %d)', size(matchesCross,1), threshold));
+    % end
 end
