@@ -8,9 +8,15 @@ function [cleaned_ocrTextResults, ocrText_values] = ocrTextNoisyRemove(ocrTextRe
     % Convert strings to numeric values
     for i = 1:n
         s = cleaned_ocrTextResults{i}.Text;
-
+        % Check negative value
+        if contains(s,'-')
+            num = str2double(s);
+            if isnan(num)
+                num = 0;  % Conversion error fallback
+            end
+            numeric_values(i) = num;
         % Check if 'k' is present
-        if contains(s, 'k')
+        elseif contains(s, 'k')
             s_no_k = strrep(s, 'k', '');
             num = str2double(s_no_k);
             if isnan(num)
@@ -32,7 +38,7 @@ function [cleaned_ocrTextResults, ocrText_values] = ocrTextNoisyRemove(ocrTextRe
     current_value = numeric_values(1);  % Initialize with the first value
 
     ocrText_values=zeros(n,1);
-    idx(1)= current_value;
+    ocrText_values(1)=current_value;
     for i = 2:n
         if numeric_values(i) > current_value
             % Update both current and previous values
@@ -49,7 +55,6 @@ function [cleaned_ocrTextResults, ocrText_values] = ocrTextNoisyRemove(ocrTextRe
             % Update the current value to the new midpoint value
             numeric_values(i) = new_value;
             current_value = new_value;
-            keep_ocrText_values(i) = false;  % Mark for removal
         end
         ocrText_values(i)=current_value;
     end
