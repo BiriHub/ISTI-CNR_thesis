@@ -833,14 +833,47 @@ exam_points = cropped_exam_points;
 exam_points(:,1) = exam_points(:,1) + x;
 exam_points(:,2) = exam_points(:,2) + y;
 
+% Identify examination frequency values
 freq_values = freq_points(:,3);
-
 % Assign the closest frequency value to each point
 [~, idx_freq] = min(abs(exam_points(:,1) - freq_points(:,1)'), [], 2);
 
 exam_points(:,3) = freq_values(idx_freq);
 
 
+% Identify examination decibel values
+[~, sort_idx] = sort(dB_points(:,2));
+dB_values_sorted = dB_points(sort_idx, 3);
+
+% Create a new list of dB points with intermediate values
+new_dB_points = dB_points(sort_idx, :);  % Start with the original sorted points
+new_dB_values = dB_values_sorted;
+
+% Insert intermediate points between each pair
+dataCount = size(new_dB_points, 1);
+for i = dataCount:-1:2
+    % Compute midpoint for y-coordinate
+    mid_y = (new_dB_points(i,2) + new_dB_points(i-1,2)) / 2;
+    % Compute midpoint for dB value
+    mid_value = (new_dB_points(i,3) + new_dB_points(i-1,3)) / 2;
+    
+    % Add the new point (also interpolate x for completeness)
+    mid_x = (new_dB_points(i,1) + new_dB_points(i-1,1)) / 2;
+    new_point = [mid_x, mid_y, mid_value];
+    
+    % Insert into the list
+    new_dB_points = [new_dB_points(1:i-1, :); 
+                     new_point; 
+                     new_dB_points(i:end, :)];
+end
+
+% Update variables
+dB_points = new_dB_points;
+dB_values = dB_points(:,3);
+
+% Assign the nearest dB value to each exam point based on y-coordinate
+[~, idx_dB] = min(abs(exam_points(:,2) - dB_points(:,2)'), [], 2);
+exam_points(:,4) = dB_values(idx_dB);
 
 
 
