@@ -3,7 +3,7 @@
 clc; clear; close all;
 
 % Load image
-img = imread('Noah_01_01_02.jpg');
+img = imread('Noah_50_06_02.jpg');
 grayImg = rgb2gray(img);
 
 
@@ -569,7 +569,7 @@ left_corner=max(grid_corner_lines(2).point1(1),grid_corner_lines(2).point2(1));
 idx = intersectionPoints(:,1) <= left_corner;
 
 dB_points= zeros(size(intersectionPoints(idx,:),1),3);
-dB_points(:,1:2) = sortrows(intersectionPoints(idx,:));
+dB_points(:,1:2) = sortrows(intersectionPoints(idx,:),2);
 
 if size(dB_points,1) ~= 14
     throw(MException('sizeError:Error','The number of points is not sufficient'));
@@ -606,7 +606,7 @@ for i = 1:size(dB_points,1)
 
     % Perform OCR
     dB_ocr_results{i} = ocr(improved_ocr_img, ocr_area, 'LayoutAnalysis', 'Block', 'CharacterSet', "-0123456789k");
-    dB_ocr_results{i}.Text
+
     % Plot corners of the OCR area
     % Top-left corner
     plot(ocr_area(1), ocr_area(2), 'bs', 'MarkerSize', 4, 'LineWidth', 1);
@@ -663,14 +663,14 @@ BW_binarized = bwskel(BW_complem);
 % figure; imshow(BW_binarized);
 % figure; imshow(BW_complem);
 
-% DEBUG
-figure ; imshow(BW_binarized);
-hold on;
-% Disegna i cerchi rilevati
-viscircles(centers, radii,'EdgeColor','b', 'LineWidth', 2);
-viscircles(centers2, radii2,'EdgeColor','r', 'LineWidth', 2);
-
-hold off;
+% % DEBUG
+% figure ; imshow(BW_binarized);
+% hold on;
+% % Disegna i cerchi rilevati
+% viscircles(centers, radii,'EdgeColor','b', 'LineWidth', 2);
+% viscircles(centers2, radii2,'EdgeColor','r', 'LineWidth', 2);
+% 
+% hold off;
 
 
  % List of the point coordinates in the grid
@@ -785,12 +785,12 @@ if isempty(overlapping_bright_centers) || size(overlapping_bright_centers,1)< 4 
     cropped_exam_points = zeros(size(centroids,1),4);
     cropped_exam_points(:,1:2)=centroids;
     
-    % DEBUG
-    fprintf('Centroide di ciascun cluster trovato:\n');
-    for k = 1:nClusters
-        fprintf('  Cluster %d → Centroide (x,y) = (%.2f, %.2f)\n', ...
-                clusterLabels(k), centroids(k,1), centroids(k,2));
-    end
+    % % DEBUG
+    % fprintf('Centroide di ciascun cluster trovato:\n');
+    % for k = 1:nClusters
+    %     fprintf('  Cluster %d → Centroide (x,y) = (%.2f, %.2f)\n', ...
+    %             clusterLabels(k), centroids(k,1), centroids(k,2));
+    % end
     
     % % DEBUG
     % figure; 
@@ -876,18 +876,19 @@ dB_values = dB_points(:,3);
 exam_points(:,4) = dB_values(idx_dB);
 
 
+% Order the values according to an ascending sequence
+exam_values_csv= sortrows(exam_points(:,3:4));
+
+
 
 %% Save examination information on a CSV file
 
-% Get the path of the current folder (where the script/project is located)
-project_folder = pwd;
-
 % Build the full file path
-filename = fullfile(project_folder, 'exam_points.csv');
+filename = fullfile(pwd, 'exam_points.csv');
 
 % Create a table with column names
-data_table = array2table(exam_points(:,3:4), ...
-    'VariableNames', {'Frequency_Hz', 'dB_level'});
+data_table = array2table(exam_values_csv, ...
+    'VariableNames', {'Frequency_Hz', 'Intensity_dB'});
 
 % Save the table in CSV format
 writetable(data_table, filename);

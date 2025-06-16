@@ -46,15 +46,22 @@ function [cleaned_ocrTextResults, ocrText_values] = ocrTextNoisyRemove(ocrTextRe
         else
             % Calculate logarithmic midpoint
             log_prev = log10(current_value);
-            log_current = log10(numeric_values(i+1));
-            log_mid = (log_prev + log_current) / 2;
+            j=i+1;
+            while numeric_values(j)==0
+                j=j+1;
+            end
+            nZero = j-i;
+
+            log_next = log10(numeric_values(j));
+
+            V = logspace(log_prev,log_next,nZero+2);
             
             % Set new value to 10^(logarithmic midpoint)
-            new_value = ceil(10^log_mid);
+            new_values = round(V(2:end-1) / 10) * 10;
             
             % Update the current value to the new midpoint value
-            numeric_values(i) = new_value;
-            current_value = new_value;
+            numeric_values(i : j-1) = new_values;
+            current_value = new_values(1);
         end
         ocrText_values(i)=current_value;
     end
