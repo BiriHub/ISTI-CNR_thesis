@@ -3,7 +3,7 @@
 clc; clear; close all;
 
 % Load image
-img = imread('Noah_50_06_02.jpg');
+img = imread('dataset\Noah_50_01_01.jpg');
 grayImg = rgb2gray(img);
 
 
@@ -469,7 +469,7 @@ end
 intersectionPoints = intersectionPoints(1:k-1, :);
 % 
 
-% DEGUB
+% % DEGUB
 % figure; imshow(grayImg), hold on;
 % 
 % plot(intersectionPoints(:,1), intersectionPoints(:,2), 'ro', 'MarkerSize', 4, 'LineWidth', 1);
@@ -500,9 +500,9 @@ idx = intersectionPoints(:,2) <= upper_corner;
 freq_points= zeros(size(intersectionPoints(idx,:),1),3);
 freq_points(:,1:2) = sortrows(intersectionPoints(idx,:));
 
-if size(freq_points,1) ~= 13
-    throw(MException('sizeError:Error','The number of points is not sufficient'));
-end
+% if size(freq_points,1) ~= 13
+%     throw(MException('sizeError:Error','The number of points is not sufficient'));
+% end
 
 % Initialize array to store OCR results for the frequency axis
 freq_ocr_results = cell(size(freq_points,1), 1);
@@ -578,10 +578,10 @@ idx = intersectionPoints(:,1) <= left_corner;
 
 dB_points= zeros(size(intersectionPoints(idx,:),1),3);
 dB_points(:,1:2) = sortrows(intersectionPoints(idx,:),2);
-
-if size(dB_points,1) ~= 14
-    throw(MException('sizeError:Error','The number of points is not sufficient'));
-end
+% 
+% if size(dB_points,1) ~= 14
+%     throw(MException('sizeError:Error','The number of points is not sufficient'));
+% end
 
 % Initialize array to store OCR results for the frequency axis
 dB_ocr_results = cell(size(dB_points,1), 1);
@@ -648,9 +648,9 @@ dB_points(:,3)=dB_labeled_list;
 % 1. Extract information with Hough
 close all;
 
-x = max(refined_grid_points(1,1), refined_grid_points(3,1));
+x = min(refined_grid_points(1,1), refined_grid_points(3,1));
 y = max(refined_grid_points(1,2), refined_grid_points(2,2));
-cropped_img = imcrop (grayImg, [x,y,refined_grid_points(2,1)- x, refined_grid_points(3,2)-y]);
+cropped_img = imcrop (grayImg, [x,y,max(refined_grid_points(2,1),refined_grid_points(4,1))- x, refined_grid_points(3,2)-y]);
 
 filtered_img = imadjust(cropped_img);
 
@@ -671,14 +671,14 @@ BW_binarized = bwskel(BW_complem);
 % figure; imshow(BW_binarized);
 % figure; imshow(BW_complem);
 
-% % DEBUG
-% figure ; imshow(BW_binarized);
-% hold on;
-% % Disegna i cerchi rilevati
-% viscircles(centers, radii,'EdgeColor','b', 'LineWidth', 2);
-% viscircles(centers2, radii2,'EdgeColor','r', 'LineWidth', 2);
-% 
-% hold off;
+% DEBUG
+figure ; imshow(BW_binarized);
+hold on;
+% Disegna i cerchi rilevati
+viscircles(centers, radii,'EdgeColor','b', 'LineWidth', 2);
+viscircles(centers2, radii2,'EdgeColor','r', 'LineWidth', 2);
+
+hold off;
 
 
  % List of the point coordinates in the grid
@@ -708,7 +708,7 @@ if ~isempty(centers) && ~isempty(centers2)
             % Verifica se i cerchi si sovrappongono
             % Due cerchi si sovrappongono se la distanza tra i centri è minore
             % della somma dei loro raggi
-            if distance<3
+            if distance<5
                 overlapping_bright_centers = [overlapping_bright_centers; center_bright];
                 break; % Non serve controllare altri cerchi scuri
             end
@@ -903,6 +903,11 @@ writetable(data_table, filename);
 
 % Confirmation message
 disp(['File successfully saved: ' filename]);
+
+
+
+
+
 
 
 
