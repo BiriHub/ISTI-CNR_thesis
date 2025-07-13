@@ -1,4 +1,4 @@
-function [xI, yI] = intersectLines(x1,y1,x2,y2,x3,y3,x4,y4)
+function [xI, yI] = intersectLines(x1,y1,x2,y2,x3,y3,x4,y4,img_max_width,img_max_height)
 % Computes the intersection point (xI, yI) of two lines defined by
 % the points (x1,y1)-(x2,y2) and (x3,y3)-(x4,y4).
 % If the lines are parallel (i.e., they have no intersection), 
@@ -31,7 +31,7 @@ function [xI, yI] = intersectLines(x1,y1,x2,y2,x3,y3,x4,y4)
     yI = (A1*C2 - A2*C1) / det;
     
     % Check for invalid point coordinates
-    if abs(xI) > 1e3 || abs(yI) > 1e3
+    if abs(xI) > img_max_width || abs(yI) > img_max_height
         xI = NaN;
         yI = NaN;
     end

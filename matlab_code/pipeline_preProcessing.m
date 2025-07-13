@@ -34,31 +34,38 @@ edgeMap = imdilate(edgeMap, strel("square", 3));
 peaks = houghpeaks(H, 4);
 
 % Extract the detected lines based on the found peaks
-hough_grid_lines = houghlines(edgeMap, theta, rho, peaks, 'FillGap', 40,'MinLength',150);
+hough_grid_lines = houghlines(edgeMap, theta, rho, peaks, 'FillGap', 600,'MinLength',300);
 
-% % DEBUG
-% figure;
-% imshow(img);
-% hold on;
-% for k = 1:length(hough_grid_lines)
-%     xy = [hough_grid_lines(k).point1; hough_grid_lines(k).point2];
-%     plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', 'green');
-%     % Display the starting and ending points of the lines
-%     plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
-%     plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
-% end
-% 
-% title('Lines detected with the Hough Transform');
-% hold off;
+% DEBUG
+figure;
+imshow(img);
+hold on;
+for k = 1:length(hough_grid_lines)
+    xy = [hough_grid_lines(k).point1; hough_grid_lines(k).point2];
+    plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', 'green');
+    % Display the starting and ending points of the lines
+    plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
+    plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
+end
+
+title('Lines detected with the Hough Transform');
+hold off;
 
 %% 2.2 Identify digital intersection points between detected segments
 
 num_lines = 4;
+if size(hough_grid_lines,2)~= num_lines
+    disp("Error")
+end
+
+[img_max_height,img_max_width]= size(grayImg);
 
 % List of x coordinates of intersection points
-point_intersec_x = [];
+point_intersec_x = zeros(num_lines,1);
 % List of y coordinates of intersection points
-point_intersec_y = [];
+point_intersec_y = zeros(num_lines,1);
+
+k= 1;
 
 for i = 1:num_lines
     % First line
@@ -66,18 +73,19 @@ for i = 1:num_lines
     line1_p2 = hough_grid_lines(i).point2;
 
     % Check all intersections between line1 and the other lines
-    for j = i+1:num_lines
+    for j = 1:num_lines
 
         if j ~= i 
             % Second line
             line2_p1 = hough_grid_lines(j).point1;
             line2_p2 = hough_grid_lines(j).point2;
     
-            [intersec_X, intersec_Y] = intersectLines(line1_p1(1), line1_p1(2), line1_p2(1), line1_p2(2), line2_p1(1), line2_p1(2), line2_p2(1), line2_p2(2));
+            [intersec_X, intersec_Y] = intersectLines(line1_p1(1), line1_p1(2), line1_p2(1), line1_p2(2), line2_p1(1), line2_p1(2), line2_p2(1), line2_p2(2),img_max_width,img_max_height);
     
-            if not(isnan(intersec_X) || isnan(intersec_Y))
-                point_intersec_x = [point_intersec_x, intersec_X];
-                point_intersec_y = [point_intersec_y, intersec_Y];
+            if not(isnan(intersec_X) || isnan(intersec_Y)) && not(any((point_intersec_x == intersec_X) & (point_intersec_y == intersec_Y)))
+                point_intersec_x(k) = intersec_X;
+                point_intersec_y(k) = intersec_Y;
+                k=k+1;
             end
         end
 
