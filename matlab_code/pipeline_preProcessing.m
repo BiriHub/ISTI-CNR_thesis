@@ -1,10 +1,13 @@
 %% 1. Image pre-processing script in MATLAB
 
 clc; clear; close all;
-
+tic;
 % Load image
-img = imread('dataset\Noah_50_01_01.jpg');
+img = imread('dataset\Noah_01_01_01.jpg');
 grayImg = rgb2gray(img);
+
+% Get image width and height
+[img_max_height,img_max_width]= size(grayImg);
 
 
 %% 2. Preparing the image before applying th Hough transformation to identify an APPROXIMATION of grid corners
@@ -36,110 +39,89 @@ peaks = houghpeaks(H, 4);
 % Extract the detected lines based on the found peaks
 hough_grid_lines = houghlines(edgeMap, theta, rho, peaks, 'FillGap', 600,'MinLength',300);
 
-% DEBUG
-figure;
-imshow(img);
-hold on;
-for k = 1:length(hough_grid_lines)
-    xy = [hough_grid_lines(k).point1; hough_grid_lines(k).point2];
-    plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', 'green');
-    % Display the starting and ending points of the lines
-    plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
-    plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
-end
-
-title('Lines detected with the Hough Transform');
-hold off;
+% % DEBUG
+% figure;
+% imshow(img);
+% hold on;
+% for k = 1:length(hough_grid_lines)
+%     xy = [hough_grid_lines(k).point1; hough_grid_lines(k).point2];
+%     plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', 'green');
+%     % Display the starting and ending points of the lines
+%     plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
+%     plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
+% end
+% 
+% title('Lines detected with the Hough Transform');
+% hold off;
 
 %% 2.2 Identify digital intersection points between detected segments
 
 num_lines = 4;
 if size(hough_grid_lines,2)~= num_lines
     disp("Error")
+    exit;
 end
 
-[img_max_height,img_max_width]= size(grayImg);
+% Find the parallel line based on the theta angle
+idx= knnsearch([hough_grid_lines.theta]',hough_grid_lines(1).theta,"K",4);
+
+% Parallel lines
+line_group1=[hough_grid_lines(1:idx(2))];
+% Orthogonal lines
+line_group2 =[hough_grid_lines(idx(3):idx(4))];
+
+
+k= 1;
 
 % List of x coordinates of intersection points
 point_intersec_x = zeros(num_lines,1);
 % List of y coordinates of intersection points
 point_intersec_y = zeros(num_lines,1);
 
-k= 1;
+% Find the intersection between lines
+for i = 1:size(line_group1,2)
 
-for i = 1:num_lines
-    % First line
-    line1_p1 = hough_grid_lines(i).point1;
-    line1_p2 = hough_grid_lines(i).point2;
+    line1_p1 = line_group1(i).point1;
+    line1_p2 = line_group1(i).point2;
 
-    % Check all intersections between line1 and the other lines
-    for j = 1:num_lines
+    for j = 1:size(line_group2,2)
 
-        if j ~= i 
-            % Second line
-            line2_p1 = hough_grid_lines(j).point1;
-            line2_p2 = hough_grid_lines(j).point2;
-    
-            [intersec_X, intersec_Y] = intersectLines(line1_p1(1), line1_p1(2), line1_p2(1), line1_p2(2), line2_p1(1), line2_p1(2), line2_p2(1), line2_p2(2),img_max_width,img_max_height);
-    
-            if not(isnan(intersec_X) || isnan(intersec_Y)) && not(any((point_intersec_x == intersec_X) & (point_intersec_y == intersec_Y)))
-                point_intersec_x(k) = intersec_X;
-                point_intersec_y(k) = intersec_Y;
-                k=k+1;
-            end
-        end
+        line2_p1 = line_group2(j).point1;
+        line2_p2 = line_group2(j).point2;
 
+        [intersec_X, intersec_Y] = intersectLines(line1_p1(1), line1_p1(2), line1_p2(1), line1_p2(2), line2_p1(1), line2_p1(2), line2_p2(1), line2_p2(2),...
+            img_max_width,img_max_height);
+
+        point_intersec_x(k) = intersec_X;
+        point_intersec_y(k) = intersec_Y;
+        k=k+1;
     end
 end
 
 % Combine coordinates in a new matrix 
 points = [point_intersec_x(:) point_intersec_y(:)];
 
-% Sort rows in an ascending order on coordinate Y
-points_sorted = sortrows(points, 2);  
+% Sort rows in an ascending order on coordinate Y and X
+points_sorted = sortrows(points,[2 1]);  
 
-% Separate the points in two different groups based on their location on
-% the image
-top_points = points_sorted(1:2, :);
-bottom_points = points_sorted(3:4, :);
-
-% Tra i top_points, il punto con x minore è top-left, con x maggiore è top-right
-if top_points(1,1) < top_points(2,1)
-    top_left = top_points(1,:);
-    top_right = top_points(2,:);
-else
-    top_left = top_points(2,:);
-    top_right = top_points(1,:);
-end
-
-% Tra i bottom_points, il punto con x minore è bottom-left, con x maggiore è bottom-right
-if bottom_points(1,1) < bottom_points(2,1)
-    bottom_left = bottom_points(1,:);
-    bottom_right = bottom_points(2,:);
-else
-    bottom_left = bottom_points(2,:);
-    bottom_right = bottom_points(1,:);
-end
+% Containts the digital approximation of grid corners
+grid_points= [points_sorted(1,1) points_sorted(1,2);points_sorted(2,1) points_sorted(2,2);
+              points_sorted(3,1) points_sorted(3,2); points_sorted(4,1) points_sorted(4,2)];
 
 % %DEBUG
 % figure;
 % imshow(img);
 % hold on;
-% plot(top_left(1), top_left(2), 'bo', 'MarkerSize', 10, 'LineWidth', 2);
-% plot(top_right(1), top_right(2), 'go', 'MarkerSize', 10, 'LineWidth', 2);
-% plot(bottom_left(1), bottom_left(2), 'co', 'MarkerSize', 10, 'LineWidth', 2);
-% plot(bottom_right(1), bottom_right(2), 'mo', 'MarkerSize', 10, 'LineWidth', 2);
+% plot(grid_points(1,1), grid_points(1,2), 'bo', 'MarkerSize', 10, 'LineWidth', 2);
+% plot(grid_points(2,1), grid_points(2,2), 'go', 'MarkerSize', 10, 'LineWidth', 2);
+% plot(grid_points(3,1), grid_points(3,2), 'co', 'MarkerSize', 10, 'LineWidth', 2);
+% plot(grid_points(4,1), grid_points(4,2), 'mo', 'MarkerSize', 10, 'LineWidth', 2);
 % legend('Top Left', 'Top Right', 'Bottom Left', 'Bottom Right');
 % hold off;
 
-% Containts the digital approximation of grid corners
-grid_points= [top_left(1) top_left(2);top_right(1) top_right(2);
-              bottom_left(1) bottom_left(2); bottom_right(1) bottom_right(2)];
-
+%%
 
 % 1. Filter points in the OCR area 
-[img_max_height,img_max_width]= size(grayImg);
-
 
 % Frequencies axis
 
@@ -353,7 +335,7 @@ if not(isempty(firstEmptyRowIdx))
     vertical_lines = vertical_lines(1:firstEmptyRowIdx-1,:);
 end
 
-
+% 
 % % DEBUG
 % figure;
 % imshow(img);
@@ -520,7 +502,7 @@ BW_adj_img = imbinarize(filt_adj_img);
 improved_ocr_img = bwareaopen(BW_adj_img, 50);
 
 % %DEBUG
-figure, imshow(improved_ocr_img);
+% figure, imshow(improved_ocr_img);
 
 % Process OCR for each point in freq_points
 for i = 1:size(freq_points,1)
@@ -671,14 +653,14 @@ BW_binarized = bwskel(BW_complem);
 % figure; imshow(BW_binarized);
 % figure; imshow(BW_complem);
 
-% DEBUG
-figure ; imshow(BW_binarized);
-hold on;
-% Disegna i cerchi rilevati
-viscircles(centers, radii,'EdgeColor','b', 'LineWidth', 2);
-viscircles(centers2, radii2,'EdgeColor','r', 'LineWidth', 2);
-
-hold off;
+% % DEBUG
+% figure ; imshow(BW_binarized);
+% hold on;
+% % Disegna i cerchi rilevati
+% viscircles(centers, radii,'EdgeColor','b', 'LineWidth', 2);
+% viscircles(centers2, radii2,'EdgeColor','r', 'LineWidth', 2);
+% 
+% hold off;
 
 
  % List of the point coordinates in the grid
@@ -823,7 +805,7 @@ if isempty(overlapping_bright_centers) || size(overlapping_bright_centers,1)< 4 
     % axis ij;  % per far corrispondere gli assi alle coordinate immagine
     % xlabel('X [pixel]');
     % ylabel('Y [pixel]');
-    % legend('Location','bestoutside');
+    % % legend('Location','bestoutside');
     % title('Cluster e relativi centroidi');
     % hold off;
 
@@ -906,7 +888,8 @@ disp(['File successfully saved: ' filename]);
 
 
 
-
+execution_time=toc;
+disp(["Execution time:" execution_time]);
 
 
 
