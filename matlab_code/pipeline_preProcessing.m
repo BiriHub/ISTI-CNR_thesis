@@ -67,8 +67,10 @@ idx= knnsearch([hough_grid_lines.theta]',hough_grid_lines(1).theta,"K",4);
 
 % Parallel lines
 line_group1=[hough_grid_lines(1:idx(2))];
+
+other_idx=sort([idx(3:4)]);
 % Orthogonal lines
-line_group2 =[hough_grid_lines(idx(3):idx(4))];
+line_group2 =[hough_grid_lines(other_idx)];
 
 
 k= 1;
@@ -189,12 +191,13 @@ bin_img = imcomplement(imbinarize(grayImg));
 edgeMap = imdilate(bin_img, strel("square", 3));
 edgeMap= bwmorph(edgeMap,'skeleton');
 
+
 % Compute the Hough Transform
 [H, theta, rho] = hough(edgeMap);
 
 peaks = houghpeaks(H, 31, 'threshold', ceil(0.01 * max(H(:))));
 % Extract the detected lines based on the found peaks
-lines = houghlines(edgeMap, theta, rho, peaks, 'FillGap', 150, 'MinLength', 150);
+lines = houghlines(edgeMap, theta, rho, peaks, 'FillGap', 500, 'MinLength', 500);
 
 
 % DEBUG x hough result
@@ -385,7 +388,7 @@ end
 
 
 % Optimize the size
-intersectionPoints = intersectionPoints(1:k-1, :);
+intersectionPoints = round(intersectionPoints(1:k-1, :),2);
 % 
 
 % % DEGUB
@@ -409,22 +412,6 @@ intersectionPoints = intersectionPoints(1:k-1, :);
 
 %% OCR IMPROVEMENT
 
-%1.  List points over the frequency text area by extracting coordinates 
-% that are above the upper-left grid corner
-
-% Frequency
-upper_corner=max(grid_corner_lines(1).point1(2),grid_corner_lines(1).point2(2));
-idx = intersectionPoints(:,2) <= upper_corner;
-
-freq_points= zeros(size(intersectionPoints(idx,:),1),3);
-freq_points(:,1:2) = sortrows(intersectionPoints(idx,:));
-
-% if size(freq_points,1) ~= 13
-%     throw(MException('sizeError:Error','The number of points is not sufficient'));
-% end
-
-% Initialize array to store OCR results for the frequency axis
-freq_ocr_results = cell(size(freq_points,1), 1);
 
 % Prepare the image for the ocr
 adj_img = imadjust(grayImg);
@@ -437,6 +424,26 @@ BW_adj_img = imbinarize(filt_adj_img);
 
 % Rimuovi piccoli oggetti (rumore)
 improved_ocr_img = bwareaopen(BW_adj_img, 50);
+
+%1.  List points over the frequency text area by extracting coordinates 
+% that are above the upper-left grid corner
+
+% Frequency
+upper_corner_point=min(grid_corner_lines(1).point1(2),grid_corner_lines(1).point2(2));
+lower_corner_point=max(grid_corner_lines(1).point1(2),grid_corner_lines(1).point2(2));
+idx = intersectionPoints(:,2) >= upper_corner_point & intersectionPoints(:,2) <=lower_corner_point;
+
+freq_points= zeros(size(intersectionPoints(idx,:),1),3);
+freq_points(:,1:2) = sortrows(intersectionPoints(idx,:));
+
+if size(freq_points,1) < 8 % convetional frequencies scale in an audiogram
+    throw(MException('sizeError:Error','The number of points for frequency axis is not sufficient'));
+end
+
+% Initialize array to store OCR results for the frequency axis
+freq_ocr_results = cell(size(freq_points,1), 1);
+
+
 
 % %DEBUG
 % figure, imshow(improved_ocr_img);
@@ -492,15 +499,16 @@ end
 
 
 % Decibel axis
-left_corner=max(grid_corner_lines(2).point1(1),grid_corner_lines(2).point2(1));
-idx = intersectionPoints(:,1) <= left_corner;
+left_corner_point=min(grid_corner_lines(2).point1(1),grid_corner_lines(2).point2(1));
+right_corner_point=max(grid_corner_lines(2).point1(1),grid_corner_lines(2).point2(1));
+idx = intersectionPoints(:,1) >= left_corner_point & intersectionPoints(:,1) <=right_corner_point;
 
 dB_points= zeros(size(intersectionPoints(idx,:),1),3);
 dB_points(:,1:2) = sortrows(intersectionPoints(idx,:),2);
-% 
-% if size(dB_points,1) ~= 14
-%     throw(MException('sizeError:Error','The number of points is not sufficient'));
-% end
+
+if size(dB_points,1) < 14 % convetional range of decibel values for an audiogram
+    throw(MException('sizeError:Error','The number of points for decibel axis is not sufficient'));
+end
 
 % Initialize array to store OCR results for the frequency axis
 dB_ocr_results = cell(size(dB_points,1), 1);
@@ -556,11 +564,11 @@ hold off;
 % Remove noise in the ocr results
 
 % Frequencies 
-[freq_ocr_results, freq_labeled_list]= ocrTextNoisyRemove(freq_ocr_results);
+[freq_ocr_results, freq_labeled_list]= ocrFreqAdjust(freq_ocr_results);
 freq_points(:,3)=freq_labeled_list;
 
 % Decibels
-[dB_ocr_results, dB_labeled_list]= ocrTextNoisyRemove(dB_ocr_results);
+[dB_ocr_results, dB_labeled_list]= ocrDecibelAdjust(dB_ocr_results);
 dB_points(:,3)=dB_labeled_list;
 
 %% % FINAL PART
@@ -572,32 +580,28 @@ y = max(refined_grid_points(1,2), refined_grid_points(2,2));
 cropped_img = imcrop (grayImg, [x,y,max(refined_grid_points(2,1),refined_grid_points(4,1))- x, refined_grid_points(3,2)-y]);
 
 filtered_img = imadjust(cropped_img);
-
-
 BW_binarized = imbinarize(filtered_img);
 
-
-
 BW_complem=imcomplement(BW_binarized);
+BW_complem = imdilate(BW_complem,strel('square',1));
 BW_binarized = bwskel(BW_complem);
-
 
 [centers, radii, metric] = imfindcircles(BW_binarized,[6 25],"ObjectPolarity","dark","Method","PhaseCode");
 
 [centers2, radii2, metric2] = imfindcircles(BW_binarized,[6 25],"ObjectPolarity","bright","Method","PhaseCode");
 
 % DEBUG
-% figure; imshow(BW_binarized);
-% figure; imshow(BW_complem);
+figure; imshow(BW_binarized);
+figure; imshow(BW_complem);
 
-% % DEBUG
-% figure ; imshow(BW_binarized);
-% hold on;
-% % Disegna i cerchi rilevati
-% viscircles(centers, radii,'EdgeColor','b', 'LineWidth', 2);
-% viscircles(centers2, radii2,'EdgeColor','r', 'LineWidth', 2);
-% 
-% hold off;
+% DEBUG
+figure ; imshow(BW_binarized);
+hold on;
+% Disegna i cerchi rilevati
+viscircles(centers, radii,'EdgeColor','b', 'LineWidth', 2);
+viscircles(centers2, radii2,'EdgeColor','r', 'LineWidth', 2);
+
+hold off;
 
 
  % List of the point coordinates in the grid
@@ -606,32 +610,25 @@ BW_binarized = bwskel(BW_complem);
 % Inizializza array per i centri dei cerchi bianchi sovrapposti
 overlapping_bright_centers = [];
 
+center_threshold=5;
+
 % Verifica se ci sono cerchi di entrambi i tipi
 if ~isempty(centers) && ~isempty(centers2) 
     
-    % Per ogni cerchio bianco, controlla se si sovrappone con almeno un cerchio scuro
+    % For each white circle checks if there is an overlapping with a
+    % black one
     for i = 1:size(centers2, 1)
         center_bright = centers2(i, :);
         radius_bright = radii2(i);
+       
+        % Compute distance vector
+        distances = sqrt(sum((centers - center_bright).^2, 2));
         
-        is_overlapping = false;
-        
-        % Controlla sovrapposizione con tutti i cerchi scuri
-        for j = 1:size(centers, 1)
-            center_dark = centers(j, :);
-            radius_dark = radii(j);
-            
-            % Calcola la distanza tra i centri
-            distance = sqrt(sum((center_bright - center_dark).^2));
-            
-            % Verifica se i cerchi si sovrappongono
-            % Due cerchi si sovrappongono se la distanza tra i centri è minore
-            % della somma dei loro raggi
-            if distance<5
-                overlapping_bright_centers = [overlapping_bright_centers; center_bright];
-                break; % Non serve controllare altri cerchi scuri
-            end
+        % Check if there is at least one ovelapped center
+        if any(distances < center_threshold)
+            overlapping_bright_centers = [overlapping_bright_centers; center_bright];
         end
+
     end
 end
 
@@ -658,12 +655,12 @@ if isempty(overlapping_bright_centers) || size(overlapping_bright_centers,1)< 4 
     % 4. Lancio la funzione
     matches = crossPatternMatchingBinary(BW_binarized, line_length, threshold);
     
-    % 5. Visualizzo le coordinate trovate
-    disp('Coordinate (x,y) dei centri delle croci rilevate:');
-    disp(matches);
+    % % 5. Visualizzo le coordinate trovate
+    % disp('Coordinate (x,y) dei centri delle croci rilevate:');
+    % disp(matches);
     
     
-    epsilon = 10;    % raggio massimo (in pixel) per considerare due punti 1vicini"
+    epsilon = 10;    % raggio massimo (in pixel) per considerare due punti vicini"
     MinPts  = 1;    % numero minimo di punti per formare un cluster
     
     % --- STEP 3: Esegui DBSCAN sui punti `matches` ---
@@ -674,15 +671,15 @@ if isempty(overlapping_bright_centers) || size(overlapping_bright_centers,1)< 4 
     clusterLabels = unique(idx);
     clusterLabels(clusterLabels == -1) = [];   % togliamo il rumore (-1)
     nClusters = numel(clusterLabels);
-    fprintf('Trovati %d cluster (con almeno %d punti ciascuno).\n', nClusters, MinPts);
+    % fprintf('Trovati %d cluster (con almeno %d punti ciascuno).\n', nClusters, MinPts);
     
-    % Per ciascun cluster, estraiamo le coordinate:
-    clusters = cell(nClusters,1);
-    for k = 1:nClusters
-        label = clusterLabels(k);
-        clusters{k} = matches(idx == label, :);
-        fprintf('Cluster %d: %d punti\n', label, size(clusters{k},1));
-    end
+    % % Per ciascun cluster, estraiamo le coordinate:
+    % clusters = cell(nClusters,1);
+    % for k = 1:nClusters
+    %     label = clusterLabels(k);
+    %     clusters{k} = matches(idx == label, :);
+    %     fprintf('Cluster %d: %d punti\n', label, size(clusters{k},1));
+    % end
     
     % nNoisy = sum(idx == -1);
     % fprintf('Punti considerati rumore (non assegnati a nessun cluster): %d\n', nNoisy);
@@ -753,14 +750,13 @@ else
 end
 
 
-%%
 
 % Restore the coordinates to the original image
 exam_points = cropped_exam_points;
 exam_points(:,1) = exam_points(:,1) + x;
 exam_points(:,2) = exam_points(:,2) + y;
 
-% Identify examination frequency values
+% a. Identify examination frequency values
 freq_values = freq_points(:,3);
 % Assign the closest frequency value to each point
 [~, idx_freq] = min(abs(exam_points(:,1) - freq_points(:,1)'), [], 2);
@@ -768,7 +764,7 @@ freq_values = freq_points(:,3);
 exam_points(:,3) = freq_values(idx_freq);
 
 
-% Identify examination decibel values
+% b. Identify examination decibel values
 [~, sort_idx] = sort(dB_points(:,2));
 dB_values_sorted = dB_points(sort_idx, 3);
 
