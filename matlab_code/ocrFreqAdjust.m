@@ -1,4 +1,4 @@
-function [cleaned_ocrTextResults, ocrText_values] = ocrTextNoisyRemove(ocrTextResults)
+function [cleaned_ocrTextResults, ocrText_values] = ocrFreqAdjust(ocrTextResults)
     cleaned_ocrTextResults = ocrTextResults(:);
 
     % Preallocate numeric array
@@ -43,6 +43,9 @@ function [cleaned_ocrTextResults, ocrText_values] = ocrTextNoisyRemove(ocrTextRe
         if numeric_values(i) > current_value
             % Update both current and previous values
             current_value = numeric_values(i);
+        elseif i==n
+            ratio= ocrText_values(i-1)/ocrText_values(i-2);
+            ocrText_values(i)=round((ocrText_values(i-1) * ratio) / 10) * 10;
         else
             % Calculate logarithmic midpoint
             log_prev = log10(current_value);
