@@ -119,64 +119,8 @@ grid_points= [points_sorted(1,1) points_sorted(1,2);points_sorted(2,1) points_so
 % legend('Top Left', 'Top Right', 'Bottom Left', 'Bottom Right');
 % hold off;
 
-%%
-
-% 1. Filter points in the OCR area 
-
-% Frequencies axis
-
-% Width of the upper OCR area
-upper_area_width = abs(grid_points(1,1) - img_max_width);
-
-% Height of the upper OCR area
-upper_area_height = grid_points(1,2) - 1;
-
-
-% Perform OCR
-ocr_frequency_results = ocr(img, [grid_points(1,1), 1, upper_area_width, upper_area_height], ...
-    'LayoutAnalysis', 'Block', 'CharacterSet', "0124568k");
-
-% Decibel axis
-
-% Width of the left OCR area
-left_area_width = grid_points(1,1) - 1;
-
-% Height of the left OCR area
-left_area_height = abs(grid_points(1,2) - img_max_height);
-
-% Perform OCR
-ocr_decibel_results = ocr(img, [1,grid_points(1,2), left_area_width, left_area_height], ...
-    'LayoutAnalysis', 'Block', 'CharacterSet', "01234546789-");
-
-
-
-% Get the left-lower corner of the first frequency number (125)
-% [x , y+height]
-left_lower_boundingBox_first_freq = [ocr_frequency_results.WordBoundingBoxes(1,1), ocr_frequency_results.WordBoundingBoxes(1,2)+ocr_frequency_results.WordBoundingBoxes(1,4)];
-
-
-% Get the right-lower corner of the last frequency number (16k)
-% [x +width, y+height]
-%Note : this is used as a double check to be completely sure that the
-%points are valid
-
-right_lower_boundingBox_last_freq = [ocr_frequency_results.WordBoundingBoxes(end,1)+ocr_frequency_results.WordBoundingBoxes(end,3), ocr_frequency_results.WordBoundingBoxes(end,2)+ocr_frequency_results.WordBoundingBoxes(end,4)];
-
-% Get the right-upper corner of the first decibel number (-10)
-% [x+weight , y]
-
-right_upper_boundingBox_first_dec = [ocr_decibel_results.WordBoundingBoxes(1,1)+ocr_decibel_results.WordBoundingBoxes(1,3), ocr_decibel_results.WordBoundingBoxes(1,2)];
-
-% Get the right-lower corner of the last decibel number (120)
-% [x +width, y+height]
-%Note : this is used as a double check to be completely sure that the
-%points are valid
-
-right_lower_boundingBox_last_dec = [ocr_decibel_results.WordBoundingBoxes(end,1)+ocr_decibel_results.WordBoundingBoxes(end,3), ocr_decibel_results.WordBoundingBoxes(end,2)+ocr_decibel_results.WordBoundingBoxes(end,4)];
-
-
 %% Find the closest point to digital grid corners
-
+% So as to get the adjusted grid corners
 
 % Extract as much information as possible from the binary image excluding
 % the ocr text area which can lead to ouliers in the grid corner
@@ -196,7 +140,7 @@ grid_points_cropped = grid_points - [x, y];
 % Initialize refined points in cropped coordinates
 refined_grid_points_cropped = zeros(4, 2);
 
-for i = 1:4
+for i = 1:size(grid_points_cropped,1)
     % Extract the closest point equal to 1 in the binary image near to the
     % digital grid corner
     
@@ -240,17 +184,10 @@ grid_corner_lines(4) = struct('point1', refined_grid_points(2,:), 'point2', refi
 % given the lines detected by the Hough transformation, after checked the
 % validity,it aims to identify the
 
-
-% Apply the Canny operator to obtain the binary edge map
-bin_img = edge(grayImg, 'Canny');
-
-edgeMap = imdilate(bin_img, strel('line',3,0)) | imdilate(bin_img,strel('line',3,90));
-
-
-edgeMap = imdilate(edgeMap, strel("square", 3));
-
+% Apply the binarization operator to obtain the binary image
+bin_img = imcomplement(imbinarize(grayImg));
+edgeMap = imdilate(bin_img, strel("square", 3));
 edgeMap= bwmorph(edgeMap,'skeleton');
-
 
 % Compute the Hough Transform
 [H, theta, rho] = hough(edgeMap);
@@ -260,7 +197,7 @@ peaks = houghpeaks(H, 31, 'threshold', ceil(0.01 * max(H(:))));
 lines = houghlines(edgeMap, theta, rho, peaks, 'FillGap', 150, 'MinLength', 150);
 
 
-% % DEBUG x hough result
+% DEBUG x hough result
 % figure;
 % imshow(img);
 % hold on;
@@ -335,7 +272,7 @@ if not(isempty(firstEmptyRowIdx))
     vertical_lines = vertical_lines(1:firstEmptyRowIdx-1,:);
 end
 
-% 
+
 % % DEBUG
 % figure;
 % imshow(img);
@@ -891,85 +828,3 @@ disp(['File successfully saved: ' filename]);
 execution_time=toc;
 disp(["Execution time:" execution_time]);
 
-
-
-
-function matchesCross = crossPatternMatchingBinary(binaryImg, line_length, threshold)
-    % crossPatternMatchingBinary   Rileva pattern a forma di croce (X) in un'immagine binaria con controllo diagonale aggiuntivo
-    % Input:
-    %   - binaryImg: immagine 2D già binaria (valori 0 o 1). Se non è logica, viene binarizzata tramite imbinarize.
-    %   - line_length: lunghezza (in pixel) del lato del quadrato che forma la croce.
-    %   - threshold: soglia minima di somma dei pixel sovrapposti.     
-    % Output:
-    %   - matchesCross: matrice Nx2 con le coordinate (x, y) dei punti in cui il template a croce ha risposto ≥ threshold 
-    %                   e entrambe le diagonali superano il controllo individuale.
-
-    % Verifica dimensione e binarità
-    if ~islogical(binaryImg)
-        binaryImg = imbinarize(binaryImg);
-    end
-
-    % Costruisci il template a forma di croce (X)
-    e = eye(line_length);
-    templateCross = (e + fliplr(e)) > 0;  
-    
-    % Convoluzione 2D
-    corrCross = conv2(double(binaryImg), double(templateCross), 'same');
-
-    % Trova coordinate candidate
-    [yC, xC] = find(corrCross >= threshold);
-    matchesCross = [xC, yC];
-    
-    % Prepara template per le diagonali singole (doppia precisione)
-    template45 = double(e);
-    template135 = double(fliplr(e));
-    
-    % Calcola offset per il centraggio
-    half = floor(line_length/2);
-    offset = floor((line_length-1)/2);
-    
-    % Filtraggio avanzato: controlla ogni candidato
-    validMatches = [];
-    [h, w] = size(binaryImg);
-    
-    for i = 1:size(matchesCross,1)
-        x = matchesCross(i,1);
-        y = matchesCross(i,2);
-        
-        % Calcola regione di interesse (ROI) centrata
-        rStart = max(1, y - offset);
-        rEnd = min(h, y + offset);
-        cStart = max(1, x - offset);
-        cEnd = min(w, x + offset);
-        
-        % Estrai finestra corrente
-        win = binaryImg(rStart:rEnd, cStart:cEnd);
-        winSize = size(win);
-        
-        % Adatta i template se la finestra è ai bordi
-        temp45 = template45(1:winSize(1), 1:winSize(2));
-        temp135 = template135(1:winSize(1), 1:winSize(2));
-        
-        % Calcola punteggi individuali
-        score45 = sum(sum(win .* temp45));
-        score135 = sum(sum(win .* temp135));
-        
-        % Applica soglie separate
-        minDiagScore = max(1, ceil(0.2 * line_length)); % Soglia adattiva
-        if score45 >= minDiagScore && score135 >= minDiagScore
-            validMatches = [validMatches; x, y];
-        end
-    end
-    
-    matchesCross = validMatches;
-
-    % % DEBUG
-    % if ~isempty(matchesCross)
-    %     figure; 
-    %     imshow(binaryImg); 
-    %     hold on;
-    %     plot(matchesCross(:,1), matchesCross(:,2), 'md', 'MarkerSize', 10, 'LineWidth', 2);
-    %     legend('Croce verificata');
-    %     title(sprintf('Rilevate %d croci (soglia: %d)', size(matchesCross,1), threshold));
-    % end
-end
