@@ -2,8 +2,14 @@
 
 clc; clear; close all;
 tic;
+
+a_file_list = dir(fullfile('dataset\', '*.jpg')); % Modifica l'estensione se necessario
+
+for i = 1:length(a_file_list)
+
+img_filename= a_file_list(i).name;
 % Load image
-img = imread('dataset\Noah_01_01_01.jpg');
+img = imread(strcat(a_file_list(i).folder,'\',img_filename));
 grayImg = rgb2gray(img);
 
 % Get image width and height
@@ -58,8 +64,9 @@ hough_grid_lines = houghlines(edgeMap, theta, rho, peaks, 'FillGap', 600,'MinLen
 
 num_lines = 4;
 if size(hough_grid_lines,2)~= num_lines
-    disp("Error")
-    exit;
+    disp([img_filename ': Error']);
+    continue;
+    
 end
 
 % Find the parallel line based on the theta angle
@@ -437,7 +444,9 @@ freq_points= zeros(size(intersectionPoints(idx,:),1),3);
 freq_points(:,1:2) = sortrows(intersectionPoints(idx,:));
 
 if size(freq_points,1) < 8 % convetional frequencies scale in an audiogram
-    throw(MException('sizeError:Error','The number of points for frequency axis is not sufficient'));
+    % throw(MException('sizeError:Error','The number of points for frequency axis is not sufficient'));
+    disp([img_filename ': The number of points for frequency axis is not sufficient']);
+    continue;
 end
 
 % Initialize array to store OCR results for the frequency axis
@@ -507,7 +516,9 @@ dB_points= zeros(size(intersectionPoints(idx,:),1),3);
 dB_points(:,1:2) = sortrows(intersectionPoints(idx,:),2);
 
 if size(dB_points,1) < 14 % convetional range of decibel values for an audiogram
-    throw(MException('sizeError:Error','The number of points for decibel axis is not sufficient'));
+    % throw(MException('sizeError:Error','The number of points for decibel axis is not sufficient'));
+        disp([img_filename ': The number of points for decibel axis is not sufficient']);
+    continue;
 end
 
 % Initialize array to store OCR results for the frequency axis
@@ -537,28 +548,29 @@ for i = 1:size(dB_points,1)
     % Define rectangular area for OCR
     % [x, y, width, height]
     ocr_area = [1, point1(2), point1(1) - 1,height_ocr_area];
-        rectangle('Position', ocr_area, 'EdgeColor', 'r');
+        
+    % rectangle('Position', ocr_area, 'EdgeColor', 'r');
 
     % Perform OCR
     dB_ocr_results{i} = ocr(improved_ocr_img, ocr_area, 'LayoutAnalysis', 'Block', 'CharacterSet', "-0123456789k");
-
-    % Plot corners of the OCR area
-    % Top-left corner
-    plot(ocr_area(1), ocr_area(2), 'bs', 'MarkerSize', 4, 'LineWidth', 1);
-    % Top-right corner
-    plot(ocr_area(1) + ocr_area(3), ocr_area(2), 'gs', 'MarkerSize', 4, 'LineWidth', 1);
-    % Bottom-right corner
-    plot(ocr_area(1) + ocr_area(3), ocr_area(2) + ocr_area(4), 'gs', 'MarkerSize', 4, 'LineWidth', 1);
-    % Bottom-left corner
-    plot(ocr_area(1), ocr_area(2) + ocr_area(4), 'gs', 'MarkerSize', 4, 'LineWidth', 1);
-
-    % Optional: Draw the rectangle connecting the corners
-    rectangle('Position', ocr_area, 'EdgeColor', 'r');
+    % 
+    % % Plot corners of the OCR area
+    % % Top-left corner
+    % plot(ocr_area(1), ocr_area(2), 'bs', 'MarkerSize', 4, 'LineWidth', 1);
+    % % Top-right corner
+    % plot(ocr_area(1) + ocr_area(3), ocr_area(2), 'gs', 'MarkerSize', 4, 'LineWidth', 1);
+    % % Bottom-right corner
+    % plot(ocr_area(1) + ocr_area(3), ocr_area(2) + ocr_area(4), 'gs', 'MarkerSize', 4, 'LineWidth', 1);
+    % % Bottom-left corner
+    % plot(ocr_area(1), ocr_area(2) + ocr_area(4), 'gs', 'MarkerSize', 4, 'LineWidth', 1);
+    % 
+    % % Optional: Draw the rectangle connecting the corners
+    % rectangle('Position', ocr_area, 'EdgeColor', 'r');
 
 end
 
 % Ensure the figure is updated
-hold off;
+% hold off;
 
 
 % Remove noise in the ocr results
@@ -573,7 +585,6 @@ dB_points(:,3)=dB_labeled_list;
 
 %% % FINAL PART
 % 1. Extract information with Hough
-close all;
 
 x = min(refined_grid_points(1,1), refined_grid_points(3,1));
 y = max(refined_grid_points(1,2), refined_grid_points(2,2));
@@ -590,18 +601,18 @@ BW_binarized = bwskel(BW_complem);
 
 [centers2, radii2, metric2] = imfindcircles(BW_binarized,[6 25],"ObjectPolarity","bright","Method","PhaseCode");
 
-% DEBUG
-figure; imshow(BW_binarized);
-figure; imshow(BW_complem);
-
-% DEBUG
-figure ; imshow(BW_binarized);
-hold on;
-% Disegna i cerchi rilevati
-viscircles(centers, radii,'EdgeColor','b', 'LineWidth', 2);
-viscircles(centers2, radii2,'EdgeColor','r', 'LineWidth', 2);
-
-hold off;
+% % DEBUG
+% figure; imshow(BW_binarized);
+% figure; imshow(BW_complem);
+% 
+% % DEBUG
+% figure ; imshow(BW_binarized);
+% hold on;
+% % Disegna i cerchi rilevati
+% viscircles(centers, radii,'EdgeColor','b', 'LineWidth', 2);
+% viscircles(centers2, radii2,'EdgeColor','r', 'LineWidth', 2);
+% 
+% hold off;
 
 
  % List of the point coordinates in the grid
@@ -807,7 +818,7 @@ exam_values_csv= sortrows(exam_points(:,3:4));
 %% Save examination information on a CSV file
 
 % Build the full file path
-filename = fullfile(pwd, 'exam_points.csv');
+filename = fullfile(pwd, strcat(img_filename,'_results.csv'));
 
 % Create a table with column names
 data_table = array2table(exam_values_csv, ...
@@ -824,3 +835,4 @@ disp(['File successfully saved: ' filename]);
 execution_time=toc;
 disp(["Execution time:" execution_time]);
 
+end
