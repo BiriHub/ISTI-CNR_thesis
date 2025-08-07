@@ -434,7 +434,7 @@ intersectionPoints = round(intersectionPoints(1:k-1, :),2);
 
 %% OCR IMPROVEMENT
 
-
+improved_ocr_img = enhance_text_contrast(img);
 % Prepare the image for the ocr
 adj_img = imadjust(grayImg);
 
@@ -584,18 +584,18 @@ for i = 1:size(dB_points,1)
 
 end
 
-% Ensure the figure is updated
+% % Ensure the figure is updated
 % hold off;
 
 
 % Remove noise in the ocr results
 
 % Frequencies 
-[freq_ocr_results, freq_labeled_list]= ocrFreqAdjust(freq_ocr_results);
+freq_labeled_list= ocrFreqAdjust(freq_ocr_results);
 freq_points(:,3)=freq_labeled_list;
 
 % Decibels
-[dB_ocr_results, dB_labeled_list]= ocrDecibelAdjust(dB_ocr_results);
+dB_labeled_list= ocrDecibelAdjust(dB_ocr_results);
 dB_points(:,3)=dB_labeled_list;
 
 %% % FINAL PART
@@ -849,5 +849,37 @@ disp(['File successfully saved: ' filename]);
 
 execution_time=toc;
 disp(["Execution time:" execution_time]);
+
+end
+
+
+function enhanced_img = enhance_text_contrast(img)
+    % Converti in scala di grigi se necessario
+    if size(img, 3) == 3
+        gray_img = rgb2gray(img);
+    else
+        gray_img = img;
+    end
+    
+    % 1. Normalizza l'immagine in [0,1]
+    normalized = mat2gray(gray_img);
+    
+    % 2. Trasformazione gamma per schiarire le ombre
+    gamma_dark = 2.5;  
+    lightened = normalized.^gamma_dark;
+    
+    % 3. Mappatura non lineare per aumentare il contrasto nelle luci
+    %    y = (1 - e^(-k*x)) / (1 - e^(-k)) 
+    k = 1;  % Fattore di contrasto per le alte luci
+    enhanced = (1 - exp(-k*lightened)) / (1 - exp(-k));
+    
+    % 4. Equalizzazione adattiva del contrasto (CLAHE)
+    enhanced_img = adapthisteq(enhanced);
+    
+    % 5. Ottimizzazione per OCR (opzionale)
+    enhanced_img = imsharpen(enhanced_img, 'Radius', 3, 'Amount', 2.5);
+    
+    % Converti in uint8 per visualizzazione
+    enhanced_img = im2uint8(enhanced_img);
 
 end
