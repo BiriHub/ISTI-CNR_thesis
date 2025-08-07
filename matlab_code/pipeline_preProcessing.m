@@ -248,15 +248,27 @@ for i = 1:length(lines)
         
     tmp= [lines(i).point1,lines(i).point2];
     % Save only the horizontal or vertical lines
-    if isHorizontal && ~checkIntersection(tmp,grid_corner_lines(1),grid_corner_lines(3))
-        % Adjust x-coord with the difference between the right grid corner
-        % coordinates
-        lines(i).point2(1) = lines(i).point2(1) + (abs(lines(i).point2(1)-min(grid_corner_lines(4).point1(1),grid_corner_lines(4).point1(1)))); % needed for next phase
+    if isHorizontal && ~checkIntersection(tmp,grid_corner_lines(1),grid_corner_lines(3)) 
+        % Compute the distance between
+        d1 = abs(lines(i).point1(2) - grid_corner_lines(1).point1(2));
+        d2 = abs( lines(i).point2(2) - grid_corner_lines(3).point1(2));
 
-        horizontal_lines(h,:)=tmp;
-        filteredLines = [filteredLines; lines(i)];
-        h=h+1;
-    elseif isVertical && ~checkIntersection(tmp,grid_corner_lines(2),grid_corner_lines(4))
+        if d1 > distThresh && d2> distThresh
+            % Adjust x-coord with the difference between the right grid corner
+            % coordinates
+            lines(i).point2(1) = lines(i).point2(1) + (abs(lines(i).point2(1)-min(grid_corner_lines(4).point1(1),grid_corner_lines(4).point1(1)))); % needed for next phase
+    
+            horizontal_lines(h,:)=tmp;
+            filteredLines = [filteredLines; lines(i)];
+            h=h+1;
+        end
+        
+    elseif isVertical && ~checkIntersection(tmp,grid_corner_lines(2),grid_corner_lines(4)) 
+        % Compute the distance between
+        d1 = abs(lines(i).point1(1) - grid_corner_lines(2).point1(1));
+        d2 = abs(lines(i).point2(1) - grid_corner_lines(4).point1(1));
+        
+        if d1 > distThresh && d2 > distThresh
         % Adjust y-coord with the difference between the upper grid corner
         % coordinates
         lines(i).point1(2) = lines(i).point1(2) - (abs(lines(i).point1(2)-min(grid_corner_lines(1).point1(2),grid_corner_lines(1).point2(2)))); % needed for next phase
@@ -264,6 +276,8 @@ for i = 1:length(lines)
         vertical_lines(v,:) = [lines(i).point1,lines(i).point2];
         filteredLines = [filteredLines; lines(i)];
         v=v+1;
+        end
+
     end
 end
 
