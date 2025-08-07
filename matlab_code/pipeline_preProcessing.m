@@ -236,6 +236,7 @@ vertical_lines= zeros(max_num_vert_lines,4);
 
 h=1;
 v=1;
+distThresh = 10;
 for i = 1:length(lines)
     currentTheta = lines(i).theta;
     

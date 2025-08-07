@@ -1,4 +1,6 @@
-function [cleaned_ocrTextResults, ocrText_values] = ocrDecibelAdjust(ocrTextResults)
+function  ocrText_values = ocrDecibelAdjust(ocrTextResults)
+
+    minVal = -10;
     cleaned_ocrTextResults = ocrTextResults(:);
 
     % Preallocate numeric array
@@ -16,9 +18,7 @@ function [cleaned_ocrTextResults, ocrText_values] = ocrDecibelAdjust(ocrTextResu
     end
 
     % Filter out non‐increasing values
-    
-    keep_idx = true(n, 1);       % Start by keeping all
-    current_value = numeric_values(1);  % Initialize with the first value
+    current_value = minVal;  % Initialize with the first value
 
     ocrText_values=zeros(n,1);
     ocrText_values(1)=current_value;
@@ -51,8 +51,4 @@ function [cleaned_ocrTextResults, ocrText_values] = ocrDecibelAdjust(ocrTextResu
         end
         ocrText_values(i)=current_value;
     end
-
-    % Apply filtered results
-    cleaned_ocrTextResults = cleaned_ocrTextResults(keep_idx);
-
 end
