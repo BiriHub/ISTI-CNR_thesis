@@ -68,4 +68,5 @@ function matchesCross = crossPatternMatchingBinary(binaryImg, line_length, thres
     %     legend('Verified Cross');
     %     title(sprintf('Detected %d crosses (threshold: %d)', size(matchesCross,1), threshold));
     % end
+    % pause;
 end

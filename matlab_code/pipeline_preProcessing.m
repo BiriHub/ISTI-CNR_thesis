@@ -3,13 +3,18 @@
 clc; clear; close all;
 tic;
 
-a_file_list = dir(fullfile('dataset\', '*.jpg')); % Modifica l'estensione se necessario
+a_file_list = dir(fullfile('dataset\', 'Noah_01_01_01.jpg'));
+% a_file_list = [a; dir(fullfile('dataset\withError\', '*.jpg'))];
 
 for i = 1:length(a_file_list)
-
+close all;
+disp(a_file_list(i).name);
 img_filename= a_file_list(i).name;
 % Load image
 img = imread(strcat(a_file_list(i).folder,'\',img_filename));
+[~, img_name, ~] = fileparts(img_filename);
+
+
 grayImg = rgb2gray(img);
 
 % Get image width and height
@@ -75,7 +80,7 @@ idx= knnsearch([hough_grid_lines.theta]',hough_grid_lines(1).theta,"K",4);
 % Parallel lines
 line_group1=[hough_grid_lines(1:idx(2))];
 
-other_idx=sort([idx(3:4)]);
+other_idx=sort([idx(3:4)]); 
 % Orthogonal lines
 line_group2 =[hough_grid_lines(other_idx)];
 
@@ -207,7 +212,7 @@ peaks = houghpeaks(H, 31, 'threshold', ceil(0.01 * max(H(:))));
 lines = houghlines(edgeMap, theta, rho, peaks, 'FillGap', 500, 'MinLength', 500);
 
 
-% DEBUG x hough result
+% % DEBUG x hough result
 % figure;
 % imshow(img);
 % hold on;
@@ -411,42 +416,76 @@ end
 
 % Optimize the size
 intersectionPoints = round(intersectionPoints(1:k-1, :),2);
-% 
 
-% % DEGUB
-% figure; imshow(grayImg), hold on;
-% 
-% plot(intersectionPoints(:,1), intersectionPoints(:,2), 'ro', 'MarkerSize', 4, 'LineWidth', 1);
-% 
-% title('Grid intersection points');
-% 
-% 
-% for i = 1:length(grid_corner_lines)
-%     % Punto 1 della linea
-%     x_pt1 = grid_corner_lines(i).point1(1);
-%     y_pt1 = grid_corner_lines(i).point1(2);
-%     plot(x_pt1, y_pt1, 'bs', 'MarkerSize', 4, 'LineWidth', 1);    
-%     % Punto 2 della linea
-%     x_pt2 = grid_corner_lines(i).point2(1);
-%     y_pt2 = grid_corner_lines(i).point2(2);
-%     plot(x_pt2, y_pt2, 'bs', 'MarkerSize', 4, 'LineWidth', 1);
-% end
+
+% DEGUB
+fig1 = figure('Visible', 'off');
+imshow(grayImg), hold on;
+
+plot(intersectionPoints(:,1), intersectionPoints(:,2), 'ro', 'MarkerSize', 5, 'LineWidth', 2);
+
+title('Grid points');
+
+
+for i = 1:length(grid_corner_lines)
+    % Punto 1 della linea
+    x_pt1 = grid_corner_lines(i).point1(1);
+    y_pt1 = grid_corner_lines(i).point1(2);
+    plot(x_pt1, y_pt1, 'bs', 'MarkerSize', 6, 'LineWidth', 2);    
+    % Punto 2 della linea
+    x_pt2 = grid_corner_lines(i).point2(1);
+    y_pt2 = grid_corner_lines(i).point2(2);
+    plot(x_pt2, y_pt2, 'bs', 'MarkerSize', 6, 'LineWidth', 2);
+end
+h_intersection = plot(NaN, NaN, 'ro', 'MarkerSize', 5, 'LineWidth', 2);
+h_gridcorner = plot(NaN, NaN, 'bs', 'MarkerSize', 6, 'LineWidth', 2);
+legend([h_intersection, h_gridcorner], ...
+       {'Internal grid intersections', 'Grid corners'}, ...
+       'Location', 'northeastoutside');
+hold off;
+
+saveas(fig1, fullfile(output_folder, [img_name '_grid_points.png']));
+close(fig1);
 
 %% OCR IMPROVEMENT
 
 improved_ocr_img = enhance_text_contrast(img);
-% Prepare the image for the ocr
-adj_img = imadjust(grayImg);
+% adj_img = histeq(grayImg);
+% uint8_img = uint8(adj_img)*255;  % Converti binario in uint8 [0,255]
+% 
+% % sharpened_img = imsharpen(uint8_img);
+% 
+% figure; imshow(uint8_img);
+% 
+% 
+% filt_adj_img = medfilt2(sharpened_img, [3 3]);
+% 
+% 
+% % 1. Thresholding con metodo di Otsu (invertito)
+% thresh = imbinarize(filt_adj_img); % Otsu thresholding
+% thresh = imcomplement(thresh); % Inversione bianco/nero (THRESH_BINARY_INV)
+% 
+% figure; imshow(thresh);
+% 
+% % 2. Trasformata della distanza
+% dist = bwdist(thresh, 'euclidean'); % Distanza euclidea
+% 
+% % 3. Normalizzazione [0, 255]
+% % dist_normalized = mat2gray(dist); % Normalizza in [0, 1]
+% dist_uint8 = uint8(dist * 255);
+% 
+% % 4. Secondo thresholding Otsu
+% thresh2 = imbinarize(dist_uint8, 'global');
+% 
+% figure; imshow(thresh2);
+% 
+% % 5. Operazione morfologica di apertura
+% kernel = strel('disk', 4); % Kernel ellittico equivalente (7x7)
+% opening = imopen(thresh2, kernel);
 
-% Applica filtro per ridurre rumore
-filt_adj_img = medfilt2(adj_img, [3 3]);
 
-% Binarizzazione adattiva
-BW_adj_img = imbinarize(filt_adj_img);
 
-% Rimuovi piccoli oggetti (rumore)
-improved_ocr_img = bwareaopen(BW_adj_img, 50);
-
+%%
 %1.  List points over the frequency text area by extracting coordinates 
 % that are above the upper-left grid corner
 
@@ -469,7 +508,7 @@ freq_ocr_results = cell(size(freq_points,1), 1);
 
 
 
-% %DEBUG
+% % %DEBUG
 % figure, imshow(improved_ocr_img);
 
 % Process OCR for each point in freq_points
@@ -506,19 +545,19 @@ for i = 1:size(freq_points,1)
         continue;
     end
 
-    % Plot corners of the OCR area
-    hold on;
-    % Top-left corner
-    plot(ocr_area(1), ocr_area(2), 'bs', 'MarkerSize', 4, 'LineWidth', 1);
-    % Top-right corner
-    plot(ocr_area(1) + ocr_area(3), ocr_area(2), 'gs', 'MarkerSize', 4, 'LineWidth', 1);
-    % Bottom-right corner
-    plot(ocr_area(1) + ocr_area(3), ocr_area(2) + ocr_area(4), 'gs', 'MarkerSize', 4, 'LineWidth', 1);
-    % Bottom-left corner
-    plot(ocr_area(1), ocr_area(2) + ocr_area(4), 'gs', 'MarkerSize', 4, 'LineWidth', 1);
-
-    % Optional: Draw the rectangle connecting the corners
-    rectangle('Position', ocr_area, 'EdgeColor', 'r');
+    % % Plot corners of the OCR area
+    % hold on;
+    % % Top-left corner
+    % plot(ocr_area(1), ocr_area(2), 'bs', 'MarkerSize', 4, 'LineWidth', 1);
+    % % Top-right corner
+    % plot(ocr_area(1) + ocr_area(3), ocr_area(2), 'gs', 'MarkerSize', 4, 'LineWidth', 1);
+    % % Bottom-right corner
+    % plot(ocr_area(1) + ocr_area(3), ocr_area(2) + ocr_area(4), 'gs', 'MarkerSize', 4, 'LineWidth', 1);
+    % % Bottom-left corner
+    % plot(ocr_area(1), ocr_area(2) + ocr_area(4), 'gs', 'MarkerSize', 4, 'LineWidth', 1);
+    % 
+    % % % Optional: Draw the rectangle connecting the corners
+    % rectangle('Position', ocr_area, 'EdgeColor', 'r');
 end
 
 
@@ -530,7 +569,7 @@ idx = intersectionPoints(:,1) >= left_corner_point & intersectionPoints(:,1) <=r
 dB_points= zeros(size(intersectionPoints(idx,:),1),3);
 dB_points(:,1:2) = sortrows(intersectionPoints(idx,:),2);
 
-if size(dB_points,1) < 14 % convetional range of decibel values for an audiogram
+if size(dB_points,1) < 5 % convetional range of decibel values for an audiogram
     % throw(MException('sizeError:Error','The number of points for decibel axis is not sufficient'));
         disp([img_filename ': The number of points for decibel axis is not sufficient']);
     continue;
@@ -616,9 +655,6 @@ BW_binarized = bwskel(BW_complem);
 
 [centers2, radii2, metric2] = imfindcircles(BW_binarized,[6 25],"ObjectPolarity","bright","Method","PhaseCode");
 
-% % DEBUG
-% figure; imshow(BW_binarized);
-% figure; imshow(BW_complem);
 % 
 % % DEBUG
 % figure ; imshow(BW_binarized);
@@ -628,7 +664,7 @@ BW_binarized = bwskel(BW_complem);
 % viscircles(centers2, radii2,'EdgeColor','r', 'LineWidth', 2);
 % 
 % hold off;
-
+% pause;
 
  % List of the point coordinates in the grid
  cropped_exam_points=[];
@@ -872,8 +908,8 @@ function enhanced_img = enhance_text_contrast(img)
     %    y = (1 - e^(-k*x)) / (1 - e^(-k)) 
     k = 1;  % Fattore di contrasto per le alte luci
     enhanced = (1 - exp(-k*lightened)) / (1 - exp(-k));
-    
     % 4. Equalizzazione adattiva del contrasto (CLAHE)
+    
     enhanced_img = adapthisteq(enhanced);
     
     % 5. Ottimizzazione per OCR (opzionale)
@@ -881,5 +917,27 @@ function enhanced_img = enhance_text_contrast(img)
     
     % Converti in uint8 per visualizzazione
     enhanced_img = im2uint8(enhanced_img);
+    
+    % Visualizzazione comparativa
+    % figure;
+    % subplot(1,2,1), imshow(gray_img), title('Originale')
+    % subplot(1,2,2), imshow(enhanced_img), title('Contrasto Ottimizzato')
 
+    % % TEST
+    % % 1) sharpen
+    % cropS = imsharpen(enhanced_img,'Radius',2,'Amount',1.5,'Threshold',0);
+    % 
+    % % 2) deconv Wiener
+    % PSF = fspecial('gaussian',[7 7],1.2);
+    % cropW = deconvwnr(cropS, PSF, 0.005);
+    % 
+    % % 3) contrast
+    % cropC = adapthisteq(cropW,'ClipLimit',0.02);
+    % 
+    % % 4) denoise
+    % cropF = medfilt2(cropC,[3 3]);
+    % Mostra istogrammi
+    % figure;
+    % subplot(2,1,1), imhist(gray_img), title('Istogramma Originale')
+    % subplot(2,1,2), imhist(enhanced_img), title('Istogramma Ottimizzato')
 end
