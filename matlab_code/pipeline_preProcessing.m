@@ -6,6 +6,11 @@ tic;
 a_file_list = dir(fullfile('dataset\', 'Noah_01_01_01.jpg'));
 % a_file_list = [a; dir(fullfile('dataset\withError\', '*.jpg'))];
 
+main_output_folder = 'audiogram_reports';
+if ~exist(main_output_folder, 'dir')
+    mkdir(main_output_folder);
+end
+
 for i = 1:length(a_file_list)
 close all;
 disp(a_file_list(i).name);
@@ -13,6 +18,17 @@ img_filename= a_file_list(i).name;
 % Load image
 img = imread(strcat(a_file_list(i).folder,'\',img_filename));
 [~, img_name, ~] = fileparts(img_filename);
+
+img_report_folder = fullfile(main_output_folder, img_name);
+img_subfolder = fullfile(img_report_folder, 'img');
+
+% Crea le cartelle se non esistono
+if ~exist(img_report_folder, 'dir')
+    mkdir(img_report_folder);
+end
+if ~exist(img_subfolder, 'dir')
+    mkdir(img_subfolder);
+end
 
 
 grayImg = rgb2gray(img);
@@ -417,35 +433,6 @@ end
 % Optimize the size
 intersectionPoints = round(intersectionPoints(1:k-1, :),2);
 
-
-% DEGUB
-fig1 = figure('Visible', 'off');
-imshow(grayImg), hold on;
-
-plot(intersectionPoints(:,1), intersectionPoints(:,2), 'ro', 'MarkerSize', 5, 'LineWidth', 2);
-
-title('Grid points');
-
-
-for i = 1:length(grid_corner_lines)
-    % Punto 1 della linea
-    x_pt1 = grid_corner_lines(i).point1(1);
-    y_pt1 = grid_corner_lines(i).point1(2);
-    plot(x_pt1, y_pt1, 'bs', 'MarkerSize', 6, 'LineWidth', 2);    
-    % Punto 2 della linea
-    x_pt2 = grid_corner_lines(i).point2(1);
-    y_pt2 = grid_corner_lines(i).point2(2);
-    plot(x_pt2, y_pt2, 'bs', 'MarkerSize', 6, 'LineWidth', 2);
-end
-h_intersection = plot(NaN, NaN, 'ro', 'MarkerSize', 5, 'LineWidth', 2);
-h_gridcorner = plot(NaN, NaN, 'bs', 'MarkerSize', 6, 'LineWidth', 2);
-legend([h_intersection, h_gridcorner], ...
-       {'Internal grid intersections', 'Grid corners'}, ...
-       'Location', 'northeastoutside');
-hold off;
-
-saveas(fig1, fullfile(output_folder, [img_name '_grid_points.png']));
-close(fig1);
 
 %% OCR IMPROVEMENT
 
@@ -885,6 +872,153 @@ disp(['File successfully saved: ' filename]);
 
 execution_time=toc;
 disp(["Execution time:" execution_time]);
+
+
+%% Generate report
+% Save images
+% DEGUB
+
+fig0 = figure('Visible', 'off');
+imshow(img);
+title(img_name);
+saveas(fig0, fullfile(img_subfolder, img_filename));
+
+% Print grid points
+fig1 = figure('Visible', 'off');
+imshow(grayImg), hold on;
+
+plot(intersectionPoints(:,1), intersectionPoints(:,2), 'ro', 'MarkerSize', 5, 'LineWidth', 2);
+
+title('Grid points');
+
+for i = 1:length(grid_corner_lines)
+    % Punto 1 della linea
+    x_pt1 = grid_corner_lines(i).point1(1);
+    y_pt1 = grid_corner_lines(i).point1(2);
+    plot(x_pt1, y_pt1, 'bs', 'MarkerSize', 6, 'LineWidth', 2);    
+    % Punto 2 della linea
+    x_pt2 = grid_corner_lines(i).point2(1);
+    y_pt2 = grid_corner_lines(i).point2(2);
+    plot(x_pt2, y_pt2, 'bs', 'MarkerSize', 6, 'LineWidth', 2);
+end
+h_intersection = plot(NaN, NaN, 'ro', 'MarkerSize', 5, 'LineWidth', 2);
+h_gridcorner = plot(NaN, NaN, 'bs', 'MarkerSize', 6, 'LineWidth', 2);
+legend([h_intersection, h_gridcorner], ...
+       {'Internal grid intersections', 'Grid corners'}, ...
+       'Location', 'northeastoutside');
+hold off;
+saveas(fig1, fullfile(img_subfolder, [img_name '_grid_points.png']));
+close(fig1);
+%%
+% Print OCR results
+fig_ocr = figure('Visible', 'off');
+imshow(improved_ocr_img);
+hold on;
+
+% Processa e visualizza i risultati OCR per le frequenze
+for i = 1:size(freq_points,1)
+    % Calcola l'area OCR
+    if i == 1
+        a = abs(freq_points(i,1) - 1) / 2.5;
+    elseif i == 13
+        a = abs(freq_points(i,1) - freq_points(i-1,1)) / 2;
+    else
+        a = abs(freq_points(i,1) - freq_points(i-1,1)) / 2.5;
+    end
+    
+    point1 = [freq_points(i,1) - a, freq_points(i,2)];
+    point2 = [freq_points(i,1) + a, freq_points(i,2)];
+    
+    width_ocr_area = point2(1) - point1(1);
+    if point1(1) + width_ocr_area > img_max_width
+        width_ocr_area = img_max_width - point1(1) - 1;
+    end
+    
+    ocr_area = [point1(1), 1, width_ocr_area, point1(2) - 1];
+    
+    % Disegna il bounding box
+    rectangle('Position', ocr_area, 'EdgeColor', 'r', 'LineWidth', 1.5);
+    plot(ocr_area(1), ocr_area(2), 'bs', 'MarkerSize', 5, 'LineWidth', 2);
+
+    % Aggiungi la label migliorata
+    if i <= length(freq_labeled_list) && ~isnan(freq_labeled_list(i))
+        text(freq_points(i,1), freq_points(i,2)+5, ...
+            num2str(freq_labeled_list(i)), ...
+            'Color', 'g', 'FontWeight', 'bold', 'FontSize', 10, ...
+            'HorizontalAlignment', 'center');
+    end
+end
+k=1;
+% Processa e visualizza i risultati OCR per i decibel
+for i = 1:2:size(dB_points,1)
+    % Calcola l'area OCR
+    if i == 1
+        a = abs(dB_points(i,2) - 1) / 2;
+    else
+        a = abs(dB_points(i,2) - dB_points(i-1,2)) / 2;
+    end
+    
+    point1 = [dB_points(i,1), dB_points(i,2) - a];
+    point2 = [dB_points(i,1), dB_points(i,2) + a];
+    
+    height_ocr_area = point2(2) - point1(2);
+    if point1(2) + height_ocr_area > img_max_height
+        height_ocr_area = img_max_height - point1(2) - 1;
+    end
+    
+    ocr_area = [1, point1(2), point1(1) - 1, height_ocr_area];
+    
+    % Disegna il bounding box
+    rectangle('Position', ocr_area, 'EdgeColor', 'b', 'LineWidth', 1.5);
+    plot(ocr_area(1), ocr_area(2), 'rs', 'MarkerSize', 5, 'LineWidth', 2);
+    
+    % Aggiungi la label migliorata
+    if k <= length(dB_labeled_list) && ~isnan(dB_labeled_list(k))
+        text(dB_points(i,1), dB_points(i,2),...
+            num2str(dB_labeled_list(k)), ...
+            'Color', 'm', 'FontWeight', 'bold', 'FontSize', 14, ...
+            'HorizontalAlignment', 'left', 'VerticalAlignment', 'middle');
+        k=k+1;
+    end
+end
+
+% Aggiungi una legenda
+h_freq = plot(NaN, NaN, 'r-', 'LineWidth', 1.5);
+h_db = plot(NaN, NaN, 'b-', 'LineWidth', 1.5);
+
+legend([h_freq, h_db], ...
+    {'Frequency OCR Area', 'Decibel OCR Area'}, ...
+    'Location', 'northeastoutside');
+title('OCR Results with Bounding Boxes and Corrected Labels');
+hold off;
+
+% Salva l'immagine
+saveas(fig_ocr, fullfile(img_subfolder, [img_name '_ocr_boxes.png']));
+close(fig_ocr);
+
+%%
+% Print Circles/Crosses points
+fig3 = figure('Visible', 'off');
+imshow(BW_binarized);
+hold on;
+
+if ~isempty(overlapping_bright_centers)
+    % Cerchi rilevati
+    viscircles(centers, radii,'EdgeColor','b', 'LineWidth', 2);
+    viscircles(centers2, radii2,'EdgeColor','r', 'LineWidth', 2);
+    plot(cropped_exam_points(:,1), cropped_exam_points(:,2), 'gx', 'MarkerSize', 8, 'LineWidth', 2);
+    title('Detected circles');
+else
+    % Croci rilevate
+    scatter(cropped_exam_points(:,1), cropped_exam_points(:,2), 100, 'g', 'x', 'LineWidth', 2);
+    title('Detected crosses');
+end
+
+hold off;
+saveas(fig3, fullfile(img_subfolder, [img_name '_detection_result.png']));
+close(fig3);
+
+
 
 end
 
