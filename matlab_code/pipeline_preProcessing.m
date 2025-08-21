@@ -17,7 +17,7 @@ disp(a_file_list(i).name);
 img_filename= a_file_list(i).name;
 % Load image
 img = imread(strcat(a_file_list(i).folder,'\',img_filename));
-[~, img_name, ~] = fileparts(img_filename);
+[~, img_name, ext] = fileparts(img_filename);
 
 img_report_folder = fullfile(main_output_folder, img_name);
 img_subfolder = fullfile(img_report_folder, 'img');
@@ -905,7 +905,7 @@ h_intersection = plot(NaN, NaN, 'ro', 'MarkerSize', 5, 'LineWidth', 2);
 h_gridcorner = plot(NaN, NaN, 'bs', 'MarkerSize', 6, 'LineWidth', 2);
 legend([h_intersection, h_gridcorner], ...
        {'Internal grid intersections', 'Grid corners'}, ...
-       'Location', 'northeastoutside');
+       'Location', 'southoutside');
 hold off;
 saveas(fig1, fullfile(img_subfolder, [img_name '_grid_points.png']));
 close(fig1);
@@ -988,7 +988,7 @@ h_db = plot(NaN, NaN, 'b-', 'LineWidth', 1.5);
 
 legend([h_freq, h_db], ...
     {'Frequency OCR Area', 'Decibel OCR Area'}, ...
-    'Location', 'northeastoutside');
+    'Location', 'southoutside');
 title('OCR Results with Bounding Boxes and Corrected Labels');
 hold off;
 
@@ -1019,6 +1019,96 @@ saveas(fig3, fullfile(img_subfolder, [img_name '_detection_result.png']));
 close(fig3);
 
 
+%% Generating the Latex file 
+    latex_file = fullfile(img_report_folder, [img_name '_report.tex']);
+    fid = fopen(latex_file, 'w');
+    
+    % Intestazione documento
+    fprintf(fid, '\\documentclass{article}\n');
+    fprintf(fid, '\\usepackage{graphicx}\n');
+    fprintf(fid, '\\usepackage{subcaption}\n');
+    fprintf(fid, '\\usepackage{booktabs}\n');
+    fprintf(fid, '\\usepackage{array}\n');
+    fprintf(fid, '\\usepackage[margin=1.5cm]{geometry}\n\n');
+    fprintf(fid, '\\title{Audiogram Analysis Report: %s}\n', img_name);
+    fprintf(fid, '\\date{\\today}\n\n');
+    fprintf(fid, '\\begin{document}\n\n');
+    fprintf(fid, '\\maketitle\n\n');
+    
+    % Sezione immagini in griglia 2x2
+    fprintf(fid, '\\section*{Processing Results}\n');
+    fprintf(fid, '\\begin{figure}[h!]\n');
+    fprintf(fid, '\\centering\n');
+    
+    % Prima riga: Immagine originale e punti griglia
+    fprintf(fid, '\\begin{subfigure}{0.45\\textwidth}\n');
+    fprintf(fid, '\\centering\n');
+    fprintf(fid, '\\includegraphics[width=\\textwidth]{img/%s%s}\n', img_name, ext);
+    fprintf(fid, '\\caption{Original image}\n');
+    fprintf(fid, '\\end{subfigure}\n');
+    fprintf(fid, '\\hfill\n');
+    fprintf(fid, '\\begin{subfigure}{0.45\\textwidth}\n');
+    fprintf(fid, '\\centering\n');
+    fprintf(fid, '\\includegraphics[width=\\textwidth]{img/%s_grid_points.png}\n', img_name);
+    fprintf(fid, '\\caption{Grid points detection}\n');
+    fprintf(fid, '\\end{subfigure}\n');
+    
+    % Seconda riga: Risultato OCR e rilevamento cerchi/croci
+    fprintf(fid, '\\\\\n'); % Nuova riga
+    fprintf(fid, '\\begin{subfigure}{0.45\\textwidth}\n');
+    fprintf(fid, '\\centering\n');
+    fprintf(fid, '\\includegraphics[width=\\textwidth]{img/%s_ocr_boxes.png}\n', img_name);
+    fprintf(fid, '\\caption{OCR enhancement}\n');
+    fprintf(fid, '\\end{subfigure}\n');
+    fprintf(fid, '\\hfill\n');
+    fprintf(fid, '\\begin{subfigure}{0.45\\textwidth}\n');
+    fprintf(fid, '\\centering\n');
+    fprintf(fid, '\\includegraphics[width=\\textwidth]{img/%s_detection_result.png}\n', img_name);
+    fprintf(fid, '\\caption{Circle/cross detection}\n');
+    fprintf(fid, '\\end{subfigure}\n');
+    
+    fprintf(fid, '\\caption{Key processing stages for audiogram analysis}\n');
+    fprintf(fid, '\\end{figure}\n\\newpage\n');
+    
+    % Sezione tabella risultati
+    fprintf(fid, '\\section*{Examination Results}\n');
+    fprintf(fid, '\\begin{table}[h!]\n');
+    fprintf(fid, '\\centering\n');
+    fprintf(fid, '\\caption{Audiometric measurements}\n');
+    fprintf(fid, '\\begin{tabular}{>{\\ttfamily}crr}\n');
+    fprintf(fid, '\\toprule\n');
+    fprintf(fid, '\\textbf{Frequency (Hz)} & \\textbf{Intensity (dB)} \\\\\n');
+    fprintf(fid, '\\midrule\n');
+    
+    % Inserimento dati dalla tabella CSV
+    for j = 1:size(exam_values_csv, 1)
+        fprintf(fid, '%d & %d \\\\\n', exam_values_csv(j,1), exam_values_csv(j,2));
+    end
+    
+    fprintf(fid, '\\bottomrule\n');
+    fprintf(fid, '\\end{tabular}\n');
+    fprintf(fid, '\\end{table}\n\n');
+    fprintf(fid, '\\end{document}');
+    fclose(fid);
+    
+    try
+        current_dir = pwd;
+        cd(img_report_folder);
+        
+        % Compila il documento LaTeX
+        system(['pdflatex -interaction=nonstopmode -interaction=batchmode ' img_name '_report.tex']);
+        
+        % Pulisci i file ausiliari
+        delete('*.aux');
+        delete('*.log');
+        delete('*.out');
+        
+        cd(current_dir);
+        disp(['PDF report generated for: ' img_name]);
+    catch ME
+        warning('PDF compilation failed for %s: %s', img_name, ME.message);
+        cd(current_dir);
+    end
 
 end
 
@@ -1052,26 +1142,4 @@ function enhanced_img = enhance_text_contrast(img)
     % Converti in uint8 per visualizzazione
     enhanced_img = im2uint8(enhanced_img);
     
-    % Visualizzazione comparativa
-    % figure;
-    % subplot(1,2,1), imshow(gray_img), title('Originale')
-    % subplot(1,2,2), imshow(enhanced_img), title('Contrasto Ottimizzato')
-
-    % % TEST
-    % % 1) sharpen
-    % cropS = imsharpen(enhanced_img,'Radius',2,'Amount',1.5,'Threshold',0);
-    % 
-    % % 2) deconv Wiener
-    % PSF = fspecial('gaussian',[7 7],1.2);
-    % cropW = deconvwnr(cropS, PSF, 0.005);
-    % 
-    % % 3) contrast
-    % cropC = adapthisteq(cropW,'ClipLimit',0.02);
-    % 
-    % % 4) denoise
-    % cropF = medfilt2(cropC,[3 3]);
-    % Mostra istogrammi
-    % figure;
-    % subplot(2,1,1), imhist(gray_img), title('Istogramma Originale')
-    % subplot(2,1,2), imhist(enhanced_img), title('Istogramma Ottimizzato')
 end
