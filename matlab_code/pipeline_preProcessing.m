@@ -1,15 +1,18 @@
 %% 1. Image pre-processing script in MATLAB
 
-clc; clear; close all;
-tic;
+clc; %clear; 
+close all;
 
-a_file_list = dir(fullfile('dataset\', 'Noah_01_01_01.jpg'));
-% a_file_list = [a; dir(fullfile('dataset\withError\', '*.jpg'))];
-
+a = dir(fullfile('dataset\', '*.jpg'));
+a_file_list = [a; dir(fullfile('dataset\withError\', '*.jpg'));
+    dir(fullfile('dataset\toTest\', '*.jpg'));
+    dir(fullfile('dataset\ToPrint\', '*.png'))];
+csv_output_folder = 'csv_results';
 main_output_folder = 'audiogram_reports';
 if ~exist(main_output_folder, 'dir')
     mkdir(main_output_folder);
 end
+% mean_execution_time=[];
 
 for i = 1:length(a_file_list)
 close all;
@@ -22,15 +25,7 @@ img = imread(strcat(a_file_list(i).folder,'\',img_filename));
 img_report_folder = fullfile(main_output_folder, img_name);
 img_subfolder = fullfile(img_report_folder, 'img');
 
-% Crea le cartelle se non esistono
-if ~exist(img_report_folder, 'dir')
-    mkdir(img_report_folder);
-end
-if ~exist(img_subfolder, 'dir')
-    mkdir(img_subfolder);
-end
-
-
+tic;
 grayImg = rgb2gray(img);
 
 % Get image width and height
@@ -68,7 +63,7 @@ hough_grid_lines = houghlines(edgeMap, theta, rho, peaks, 'FillGap', 600,'MinLen
 
 % % DEBUG
 % figure;
-% imshow(img);
+% imshow(edgeMap);
 % hold on;
 % for k = 1:length(hough_grid_lines)
 %     xy = [hough_grid_lines(k).point1; hough_grid_lines(k).point2];
@@ -77,7 +72,6 @@ hough_grid_lines = houghlines(edgeMap, theta, rho, peaks, 'FillGap', 600,'MinLen
 %     plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
 %     plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
 % end
-% 
 % title('Lines detected with the Hough Transform');
 % hold off;
 
@@ -85,7 +79,7 @@ hough_grid_lines = houghlines(edgeMap, theta, rho, peaks, 'FillGap', 600,'MinLen
 
 num_lines = 4;
 if size(hough_grid_lines,2)~= num_lines
-    disp([img_filename ': Error']);
+    disp([img_filename ': Error: It is not possible to determine the grid area']);
     continue;
     
 end
@@ -142,11 +136,12 @@ grid_points= [points_sorted(1,1) points_sorted(1,2);points_sorted(2,1) points_so
 % figure;
 % imshow(img);
 % hold on;
-% plot(grid_points(1,1), grid_points(1,2), 'bo', 'MarkerSize', 10, 'LineWidth', 2);
-% plot(grid_points(2,1), grid_points(2,2), 'go', 'MarkerSize', 10, 'LineWidth', 2);
-% plot(grid_points(3,1), grid_points(3,2), 'co', 'MarkerSize', 10, 'LineWidth', 2);
-% plot(grid_points(4,1), grid_points(4,2), 'mo', 'MarkerSize', 10, 'LineWidth', 2);
-% legend('Top Left', 'Top Right', 'Bottom Left', 'Bottom Right');
+% plot(grid_points(1,1), grid_points(1,2), 'bo', 'MarkerSize', 10, 'LineWidth', 3);
+% plot(grid_points(2,1), grid_points(2,2), 'go', 'MarkerSize', 10, 'LineWidth', 3);
+% plot(grid_points(3,1), grid_points(3,2), 'co', 'MarkerSize', 10, 'LineWidth', 3);
+% plot(grid_points(4,1), grid_points(4,2), 'mo', 'MarkerSize', 10, 'LineWidth', 3);
+% title("Grid corner results");
+% legend('Top Left', 'Top Right', 'Bottom Left', 'Bottom Right','Location', 'south');
 % hold off;
 
 %% Find the closest point to digital grid corners
@@ -188,15 +183,20 @@ refined_grid_points = refined_grid_points_cropped + [x-1, y-1];
 % hold on;
 % plot(refined_grid_points_cropped(:,1), refined_grid_points_cropped(:,2), 'rx', 'MarkerSize', 8, 'LineWidth', 2);
 % hold off;
+
 % % Display in original image coordinates
 % figure;
 % imshow(bin_img);
 % hold on;
-% plot(grid_points(:,1), grid_points(:,2), 'mo', 'MarkerSize', 8, 'LineWidth', 2);
-% plot(refined_grid_points(:,1), refined_grid_points(:,2), 'rx', 'MarkerSize', 8, 'LineWidth', 2);
-% % Transform points back to original coordinates for display
-% points_original = points + [x-1, y-1];
-% plot(points_original(:,1), points_original(:,2), 'gx', 'MarkerSize', 1, 'LineWidth', 2);
+% plot(grid_points(:,1), grid_points(:,2), 'mo', 'MarkerSize', 9, 'LineWidth', 3);
+% plot(refined_grid_points(:,1), refined_grid_points(:,2), 'rx', 'MarkerSize', 11, 'LineWidth', 3);
+% 
+% digit_corner = plot(NaN, NaN, 'mo', 'LineWidth', 1.5);
+% adj_corners = plot(NaN, NaN, 'rx', 'LineWidth', 1.5);
+% 
+% legend([digit_corner, adj_corners], ...
+%     {'Digital corner', 'Adjusted corner'}, ...
+%     'Location', 'southoutside');
 % title('Adjusted grid corners');
 
 % Initialize the adjusted grid corner segment variables
@@ -306,7 +306,6 @@ end
 
 
 % Remove empty rows in the structures
-
 firstEmptyRowIdx= find(all(horizontal_lines == 0, 2), 1);
 if not(isempty(firstEmptyRowIdx))
     horizontal_lines = horizontal_lines(1:firstEmptyRowIdx-1,:);
@@ -327,8 +326,8 @@ end
 % xy = [filteredLines(k).point1; filteredLines(k).point2];
 % plot(xy(:,1), xy(:,2), 'LineWidth', 2, 'Color', 'green');
 % % Display the starting and ending points of the lines
-% plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 2, 'Color', 'yellow');
-% plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 2, 'Color', 'red');
+% plot(xy(1,1), xy(1,2), 'x', 'LineWidth', 3, 'Color', 'yellow');
+% plot(xy(2,1), xy(2,2), 'x', 'LineWidth', 3, 'Color', 'red');
 % end
 % title('Filtered Lines detected with the Hough Transform');
 % hold off;
@@ -403,12 +402,11 @@ for i = 1:size(horizontal_lines,1)
 end
 
 % % DEBUG
-% % Crea una nuova figura
 % figure;
 % imshow(grayImg);
 % hold on;  % Abilita la sovrapposizione dei plot
 % 
-% % Plot delle linee orizzontali (in rosso)
+% % Horizontal lines
 % numHorizLines = size(horizontal_lines, 1);
 % for i = 1:numHorizLines
 %     x_coords = [horizontal_lines(i,1), horizontal_lines(i,3)];
@@ -416,7 +414,7 @@ end
 %     plot(x_coords, y_coords, 'r-', 'LineWidth', 2);
 % end
 % 
-% % Plot delle linee verticali (in blu)
+% % Vertical lines
 % numVertLines = size(vertical_lines, 1);
 % for i = 1:numVertLines
 %     x_coords = [vertical_lines(i,1), vertical_lines(i,3)];
@@ -424,9 +422,11 @@ end
 %     plot(x_coords, y_coords, 'b-', 'LineWidth', 2);
 % end
 % 
+% for i =1 : k
+%     plot(intersectionPoints(i,1),intersectionPoints(i,2),'x', 'LineWidth',3,'Color','Green','MarkerSize',5)
+% end
 % 
-% title('Linee Grid e Punti di Intersezione');
-% 
+% title('Internal grid lines and intersection points');
 % hold off;
 
 
@@ -437,40 +437,6 @@ intersectionPoints = round(intersectionPoints(1:k-1, :),2);
 %% OCR IMPROVEMENT
 
 improved_ocr_img = enhance_text_contrast(img);
-% adj_img = histeq(grayImg);
-% uint8_img = uint8(adj_img)*255;  % Converti binario in uint8 [0,255]
-% 
-% % sharpened_img = imsharpen(uint8_img);
-% 
-% figure; imshow(uint8_img);
-% 
-% 
-% filt_adj_img = medfilt2(sharpened_img, [3 3]);
-% 
-% 
-% % 1. Thresholding con metodo di Otsu (invertito)
-% thresh = imbinarize(filt_adj_img); % Otsu thresholding
-% thresh = imcomplement(thresh); % Inversione bianco/nero (THRESH_BINARY_INV)
-% 
-% figure; imshow(thresh);
-% 
-% % 2. Trasformata della distanza
-% dist = bwdist(thresh, 'euclidean'); % Distanza euclidea
-% 
-% % 3. Normalizzazione [0, 255]
-% % dist_normalized = mat2gray(dist); % Normalizza in [0, 1]
-% dist_uint8 = uint8(dist * 255);
-% 
-% % 4. Secondo thresholding Otsu
-% thresh2 = imbinarize(dist_uint8, 'global');
-% 
-% figure; imshow(thresh2);
-% 
-% % 5. Operazione morfologica di apertura
-% kernel = strel('disk', 4); % Kernel ellittico equivalente (7x7)
-% opening = imopen(thresh2, kernel);
-
-
 
 %%
 %1.  List points over the frequency text area by extracting coordinates 
@@ -535,16 +501,16 @@ for i = 1:size(freq_points,1)
     % % Plot corners of the OCR area
     % hold on;
     % % Top-left corner
-    % plot(ocr_area(1), ocr_area(2), 'bs', 'MarkerSize', 4, 'LineWidth', 1);
+    % plot(ocr_area(1), ocr_area(2), 'bs', 'MarkerSize', 6, 'LineWidth', 2);
     % % Top-right corner
-    % plot(ocr_area(1) + ocr_area(3), ocr_area(2), 'gs', 'MarkerSize', 4, 'LineWidth', 1);
-    % % Bottom-right corner
-    % plot(ocr_area(1) + ocr_area(3), ocr_area(2) + ocr_area(4), 'gs', 'MarkerSize', 4, 'LineWidth', 1);
-    % % Bottom-left corner
-    % plot(ocr_area(1), ocr_area(2) + ocr_area(4), 'gs', 'MarkerSize', 4, 'LineWidth', 1);
+    % % plot(ocr_area(1) + ocr_area(3), ocr_area(2), 'gs', 'MarkerSize', 4, 'LineWidth', 1);
+    % % % Bottom-right corner
+    % % plot(ocr_area(1) + ocr_area(3), ocr_area(2) + ocr_area(4), 'gs', 'MarkerSize', 4, 'LineWidth', 1);
+    % % % Bottom-left corner
+    % % plot(ocr_area(1), ocr_area(2) + ocr_area(4), 'gs', 'MarkerSize', 4, 'LineWidth', 1);
     % 
     % % % Optional: Draw the rectangle connecting the corners
-    % rectangle('Position', ocr_area, 'EdgeColor', 'r');
+    % rectangle('Position', ocr_area, 'EdgeColor', 'r','LineWidth',2);
 end
 
 
@@ -597,19 +563,19 @@ for i = 1:size(dB_points,1)
     % 
     % % Plot corners of the OCR area
     % % Top-left corner
-    % plot(ocr_area(1), ocr_area(2), 'bs', 'MarkerSize', 4, 'LineWidth', 1);
-    % % Top-right corner
-    % plot(ocr_area(1) + ocr_area(3), ocr_area(2), 'gs', 'MarkerSize', 4, 'LineWidth', 1);
-    % % Bottom-right corner
-    % plot(ocr_area(1) + ocr_area(3), ocr_area(2) + ocr_area(4), 'gs', 'MarkerSize', 4, 'LineWidth', 1);
-    % % Bottom-left corner
-    % plot(ocr_area(1), ocr_area(2) + ocr_area(4), 'gs', 'MarkerSize', 4, 'LineWidth', 1);
+    % plot(ocr_area(1), ocr_area(2), 'bs', 'MarkerSize', 6, 'LineWidth', 2);
+    % % % Top-right corner
+    % % plot(ocr_area(1) + ocr_area(3), ocr_area(2), 'gs', 'MarkerSize', 4, 'LineWidth', 1);
+    % % % Bottom-right corner
+    % % plot(ocr_area(1) + ocr_area(3), ocr_area(2) + ocr_area(4), 'gs', 'MarkerSize', 4, 'LineWidth', 1);
+    % % % Bottom-left corner
+    % % plot(ocr_area(1), ocr_area(2) + ocr_area(4), 'gs', 'MarkerSize', 4, 'LineWidth', 1);
     % 
     % % Optional: Draw the rectangle connecting the corners
-    % rectangle('Position', ocr_area, 'EdgeColor', 'r');
+    % rectangle('Position', ocr_area, 'EdgeColor', 'r','LineWidth',2);
 
 end
-
+% title("OCR")
 % % Ensure the figure is updated
 % hold off;
 
@@ -625,11 +591,12 @@ dB_labeled_list= ocrDecibelAdjust(dB_ocr_results);
 dB_points(:,3)=dB_labeled_list;
 
 %% % FINAL PART
-% 1. Extract information with Hough
+% 1. Extract information with Circular Hough or with Cross pattern matching
 
 x = min(refined_grid_points(1,1), refined_grid_points(3,1));
 y = max(refined_grid_points(1,2), refined_grid_points(2,2));
-cropped_img = imcrop (grayImg, [x,y,max(refined_grid_points(2,1),refined_grid_points(4,1))- x, refined_grid_points(3,2)-y]);
+max_width= max(refined_grid_points(2,1),refined_grid_points(4,1))- x;
+cropped_img = imcrop (grayImg, [x,y,max_width, refined_grid_points(3,2)-y]);
 
 filtered_img = imadjust(cropped_img);
 BW_binarized = imbinarize(filtered_img);
@@ -642,7 +609,7 @@ BW_binarized = bwskel(BW_complem);
 
 [centers2, radii2, metric2] = imfindcircles(BW_binarized,[6 25],"ObjectPolarity","bright","Method","PhaseCode");
 
-% 
+
 % % DEBUG
 % figure ; imshow(BW_binarized);
 % hold on;
@@ -651,7 +618,6 @@ BW_binarized = bwskel(BW_complem);
 % viscircles(centers2, radii2,'EdgeColor','r', 'LineWidth', 2);
 % 
 % hold off;
-% pause;
 
  % List of the point coordinates in the grid
  cropped_exam_points=[];
@@ -855,8 +821,12 @@ exam_values_csv= sortrows(exam_points(:,3:4));
 
 %% Save examination information on a CSV file
 
+if ~exist(csv_output_folder, 'dir')
+    mkdir(csv_output_folder);
+end
+
 % Build the full file path
-filename = fullfile(pwd, strcat(img_filename,'_results.csv'));
+filename = fullfile(strcat(pwd,'\',csv_output_folder), strcat(img_name,'_results.csv'));
 
 % Create a table with column names
 data_table = array2table(exam_values_csv, ...
@@ -869,8 +839,8 @@ writetable(data_table, filename);
 disp(['File successfully saved: ' filename]);
 
 
-
-execution_time=toc;
+execution_time =toc;
+mean_execution_time=[mean_execution_time, execution_time];
 disp(["Execution time:" execution_time]);
 
 
@@ -878,6 +848,15 @@ disp(["Execution time:" execution_time]);
 % Save images
 % DEGUB
 
+% Crea le cartelle se non esistono
+if ~exist(img_report_folder, 'dir')
+    mkdir(img_report_folder);
+end
+if ~exist(img_subfolder, 'dir')
+    mkdir(img_subfolder);
+end
+
+% Print original image
 fig0 = figure('Visible', 'off');
 imshow(img);
 title(img_name);
@@ -944,7 +923,7 @@ for i = 1:size(freq_points,1)
     if i <= length(freq_labeled_list) && ~isnan(freq_labeled_list(i))
         text(freq_points(i,1), freq_points(i,2)+5, ...
             num2str(freq_labeled_list(i)), ...
-            'Color', 'g', 'FontWeight', 'bold', 'FontSize', 10, ...
+            'Color', 'g', 'FontWeight', 'bold', 'FontSize', 12, ...
             'HorizontalAlignment', 'center');
     end
 end
@@ -976,7 +955,7 @@ for i = 1:2:size(dB_points,1)
     if k <= length(dB_labeled_list) && ~isnan(dB_labeled_list(k))
         text(dB_points(i,1), dB_points(i,2),...
             num2str(dB_labeled_list(k)), ...
-            'Color', 'm', 'FontWeight', 'bold', 'FontSize', 14, ...
+            'Color', 'm', 'FontWeight', 'bold', 'FontSize', 12, ...
             'HorizontalAlignment', 'left', 'VerticalAlignment', 'middle');
         k=k+1;
     end
@@ -1010,7 +989,7 @@ if ~isempty(overlapping_bright_centers)
     title('Detected circles');
 else
     % Croci rilevate
-    scatter(cropped_exam_points(:,1), cropped_exam_points(:,2), 100, 'g', 'x', 'LineWidth', 2);
+    scatter(cropped_exam_points(:,1), cropped_exam_points(:,2), 100, 'g', 'x', 'LineWidth', 5);
     title('Detected crosses');
 end
 
@@ -1023,72 +1002,25 @@ close(fig3);
     latex_file = fullfile(img_report_folder, [img_name '_report.tex']);
     fid = fopen(latex_file, 'w');
     
-    % Intestazione documento
-    fprintf(fid, '\\documentclass{article}\n');
-    fprintf(fid, '\\usepackage{graphicx}\n');
-    fprintf(fid, '\\usepackage{subcaption}\n');
-    fprintf(fid, '\\usepackage{booktabs}\n');
-    fprintf(fid, '\\usepackage{array}\n');
-    fprintf(fid, '\\usepackage[margin=1.5cm]{geometry}\n\n');
-    fprintf(fid, '\\title{Audiogram Analysis Report: %s}\n', img_name);
-    fprintf(fid, '\\date{\\today}\n\n');
-    fprintf(fid, '\\begin{document}\n\n');
-    fprintf(fid, '\\maketitle\n\n');
-    
-    % Sezione immagini in griglia 2x2
-    fprintf(fid, '\\section*{Processing Results}\n');
-    fprintf(fid, '\\begin{figure}[h!]\n');
-    fprintf(fid, '\\centering\n');
-    
+    % Document header
+    fprintf(fid, '\\documentclass{article}\n\\usepackage{graphicx}\n\\usepackage{subcaption}\n\\usepackage{subcaption}\n\\usepackage{booktabs}\n\\usepackage{array}\n\\usepackage[margin=1.5cm]{geometry}\n\n\\title{Audiogram Analysis Report: %s}\n\\date{\\today}\n\n\\begin{document}\n\n\\maketitle\n\n\\section*{Processing Results}\n\\begin{figure}[h!]\n\\centering\n',replace(img_name,'_','\_'));
+
     % Prima riga: Immagine originale e punti griglia
-    fprintf(fid, '\\begin{subfigure}{0.45\\textwidth}\n');
-    fprintf(fid, '\\centering\n');
-    fprintf(fid, '\\includegraphics[width=\\textwidth]{img/%s%s}\n', img_name, ext);
-    fprintf(fid, '\\caption{Original image}\n');
-    fprintf(fid, '\\end{subfigure}\n');
-    fprintf(fid, '\\hfill\n');
-    fprintf(fid, '\\begin{subfigure}{0.45\\textwidth}\n');
-    fprintf(fid, '\\centering\n');
-    fprintf(fid, '\\includegraphics[width=\\textwidth]{img/%s_grid_points.png}\n', img_name);
-    fprintf(fid, '\\caption{Grid points detection}\n');
-    fprintf(fid, '\\end{subfigure}\n');
+	% Generate the first row of images with the original and the grid points results
+    fprintf(fid, '\\begin{subfigure}{0.45\\textwidth}\n\\centering\n\\includegraphics[width=\\textwidth]{img/%s%s}\n\\caption{Original image}\n\\end{subfigure}\n\\hfill\n\\begin{subfigure}{0.45\\textwidth}\n\\centering\n\\includegraphics[width=\\textwidth]{img/%s_grid_points.png}\n\\caption{Grid points detection}\n\\end{subfigure}\n', img_name, ext, img_name );
+
+    % Generate the second row of images with the OCR and the circles/crosses results
+    fprintf(fid, '\\\\\n\\begin{subfigure}{0.45\\textwidth}\n\\centering\n\\includegraphics[width=\\textwidth]{img/%s_ocr_boxes.png}\n\\caption{OCR enhancement}\n\\end{subfigure}\n\\hfill\n\\begin{subfigure}{0.45\\textwidth}\n\\centering\n\\includegraphics[width=\\textwidth]{img/%s_detection_result.png}\n\\caption{Circle/cross detection}\n\\end{subfigure}\n\\caption{Key processing stages for audiogram analysis}\n\\end{figure}\n\\newpage\n',img_name,img_name);
     
-    % Seconda riga: Risultato OCR e rilevamento cerchi/croci
-    fprintf(fid, '\\\\\n'); % Nuova riga
-    fprintf(fid, '\\begin{subfigure}{0.45\\textwidth}\n');
-    fprintf(fid, '\\centering\n');
-    fprintf(fid, '\\includegraphics[width=\\textwidth]{img/%s_ocr_boxes.png}\n', img_name);
-    fprintf(fid, '\\caption{OCR enhancement}\n');
-    fprintf(fid, '\\end{subfigure}\n');
-    fprintf(fid, '\\hfill\n');
-    fprintf(fid, '\\begin{subfigure}{0.45\\textwidth}\n');
-    fprintf(fid, '\\centering\n');
-    fprintf(fid, '\\includegraphics[width=\\textwidth]{img/%s_detection_result.png}\n', img_name);
-    fprintf(fid, '\\caption{Circle/cross detection}\n');
-    fprintf(fid, '\\end{subfigure}\n');
-    
-    fprintf(fid, '\\caption{Key processing stages for audiogram analysis}\n');
-    fprintf(fid, '\\end{figure}\n\\newpage\n');
-    
-    % Sezione tabella risultati
-    fprintf(fid, '\\section*{Examination Results}\n');
-    fprintf(fid, '\\begin{table}[h!]\n');
-    fprintf(fid, '\\centering\n');
-    fprintf(fid, '\\caption{Audiometric measurements}\n');
-    fprintf(fid, '\\begin{tabular}{>{\\ttfamily}crr}\n');
-    fprintf(fid, '\\toprule\n');
-    fprintf(fid, '\\textbf{Frequency (Hz)} & \\textbf{Intensity (dB)} \\\\\n');
-    fprintf(fid, '\\midrule\n');
-    
+    % Create the table
+    fprintf(fid, '\\section*{Examination Results}\n\\begin{table}[h!]\n\\centering\n\\caption{Audiometric measurements}\n\\begin{tabular}{>{\\ttfamily}crr}\n\\toprule\n\\textbf{Frequency (Hz)} & \\textbf{Intensity (dB)} \\\\\n\\midrule\n');
+
     % Inserimento dati dalla tabella CSV
     for j = 1:size(exam_values_csv, 1)
         fprintf(fid, '%d & %d \\\\\n', exam_values_csv(j,1), exam_values_csv(j,2));
     end
     
-    fprintf(fid, '\\bottomrule\n');
-    fprintf(fid, '\\end{tabular}\n');
-    fprintf(fid, '\\end{table}\n\n');
-    fprintf(fid, '\\end{document}');
+    fprintf(fid, '\\bottomrule\n\\end{tabular}\n\\end{table}\n\n\\end{document}');
     fclose(fid);
     
     try
@@ -1111,6 +1043,9 @@ close(fig3);
     end
 
 end
+
+disp(["Mean execution time:" mean(mean_execution_time)]);
+
 
 
 function enhanced_img = enhance_text_contrast(img)
