@@ -1035,16 +1035,26 @@ function enhanced_img = enhance_text_contrast(gray_img)
     % 2. Gamma transformation to lighten shadows
     gamma_dark = 2.5;  
     lightened = normalized.^gamma_dark;
-    
+
+    % figure;
+    % imshow(lightened);
+
     % 3. Non-linear mapping to increase contrast in highlights
     k = 1;  % Contrast factor for highlights
     enhanced = (1 - exp(-k*lightened)) / (1 - exp(-k));
-    
+
+    % figure;
+    % imshow(enhanced);
+
     % 4. Adaptive contrast equalization (CLAHE)
     enhanced_img = adapthisteq(enhanced);
-    
+    figure;
+    imshow(enhanced_img);
     enhanced_img = imsharpen(enhanced_img, 'Radius', 3, 'Amount', 2.5);
     
+    % figure;
+    % imshow(enhanced_img);
+
     % Convert to uint8 for visualization
     enhanced_img = im2uint8(enhanced_img);
 end
