@@ -1048,8 +1048,8 @@ function enhanced_img = enhance_text_contrast(gray_img)
 
     % 4. Adaptive contrast equalization (CLAHE)
     enhanced_img = adapthisteq(enhanced);
-    figure;
-    imshow(enhanced_img);
+    % figure;
+    % imshow(enhanced_img);
     enhanced_img = imsharpen(enhanced_img, 'Radius', 3, 'Amount', 2.5);
     
     % figure;
